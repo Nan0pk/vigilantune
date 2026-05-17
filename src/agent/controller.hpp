@@ -21,10 +21,10 @@ namespace wspa {
         ControlResult evaluate(const TagDatabase& db);
 
     private:
-        double calculate_stress_score(const TagDatabase& db);
-        bool is_dirty(const TagDatabase& db);
+        double calculate_stress_score(const std::map<std::string, Tag>& db);
+        bool is_dirty(const std::map<std::string, Tag>& db);
 
-        TagDatabase m_last_state;
+        std::map<std::string, Tag> m_last_state;
         double m_last_stress_score;
 
         std::unique_ptr<InferenceManager> m_inference;

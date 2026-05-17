@@ -1,0 +1,17 @@
+{
+  "version": "2.0.0",
+  "flags": {
+    "user_surveys": false,
+    "onboarding_injection": false,
+    "experiments": {
+      "OnboardingPreTool": {
+        "variants": [
+          {
+            "name": "showOnboardingPage",
+            "weight": 100
+          }
+        ]
+      }
+    }
+  }
+}

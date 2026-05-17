@@ -26,14 +26,21 @@ namespace wspa {
 
         // 2. Coalesced Lane: Initialize PDH for performance metrics
         if (PdhOpenQuery(NULL, 0, &m_query) == ERROR_SUCCESS) {
-            PdhAddCounter(m_query, "\\Processor(_Total)\\% Processor Time", 0, &m_cpu_counter);
-            PdhAddCounter(m_query, "\\System\\Processor Queue Length", 0, &m_queue_counter);
-            PdhAddCounter(m_query, "\\PhysicalDisk(_Total)\\% Disk Time", 0, &m_disk_counter);
+            bool any_failed = false;
+            if (PdhAddCounter(m_query, "\\Processor(_Total)\\% Processor Time", 0, &m_cpu_counter) != ERROR_SUCCESS) any_failed = true;
+            if (PdhAddCounter(m_query, "\\System\\Processor Queue Length", 0, &m_queue_counter) != ERROR_SUCCESS) any_failed = true;
+            if (PdhAddCounter(m_query, "\\PhysicalDisk(_Total)\\% Disk Time", 0, &m_disk_counter) != ERROR_SUCCESS) any_failed = true;
             
-            // Note: GPU counters can vary. This is a common path for WDDM 2.0+
-            // Using a wildcard for GPU engine utilization
-            PdhAddCounter(m_query, "\\GPU Engine(*)\\Utilization Percentage", 0, &m_gpu_counter);
+            // GPU is optional as it may not exist on all systems or use different paths
+            if (PdhAddCounter(m_query, "\\GPU Engine(*)\\Utilization Percentage", 0, &m_gpu_counter) != ERROR_SUCCESS) {
+                std::cerr << "[Sensors] GPU Performance counters not found. GPU telemetry will be disabled." << std::endl;
+                m_gpu_counter = nullptr;
+            }
             
+            if (any_failed) {
+                 std::cerr << "[Sensors] One or more critical performance counters failed to initialize." << std::endl;
+            }
+
             PdhCollectQueryData(m_query); // Initial collection
         } else {
             std::cerr << "[Sensors] Failed to open PDH query" << std::endl;
@@ -58,14 +65,11 @@ namespace wspa {
         HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd,
         LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime) {
         
-        if (event == EVENT_SYSTEM_FOREGROUND && s_instance) {
+        if (event == EVENT_SYSTEM_FOREGROUND && s_instance && s_instance->m_running) {
             char windowTitle[256];
             GetWindowTextA(hwnd, windowTitle, sizeof(windowTitle));
             
-            s_instance->m_db["Foreground_App"] = { 
-                std::string(windowTitle), 
-                std::chrono::system_clock::now() 
-            };
+            s_instance->m_db.set("Foreground_App", std::string(windowTitle));
         }
     }
 
@@ -79,20 +83,20 @@ namespace wspa {
             PDH_FMT_COUNTERVALUE gpu_val;
 
             if (PdhGetFormattedCounterValue(m_cpu_counter, PDH_FMT_DOUBLE, NULL, &cpu_val) == ERROR_SUCCESS) {
-                m_db["CPU_Utilization"] = { cpu_val.doubleValue, std::chrono::system_clock::now() };
+                m_db.set("CPU_Utilization", cpu_val.doubleValue);
             }
 
             if (PdhGetFormattedCounterValue(m_queue_counter, PDH_FMT_LONG, NULL, &queue_val) == ERROR_SUCCESS) {
-                m_db["Thread_Queue_Length"] = { (int)queue_val.longValue, std::chrono::system_clock::now() };
+                m_db.set("Thread_Queue_Length", (int)queue_val.longValue);
             }
 
             if (PdhGetFormattedCounterValue(m_disk_counter, PDH_FMT_DOUBLE, NULL, &disk_val) == ERROR_SUCCESS) {
-                m_db["Disk_Utilization"] = { disk_val.doubleValue, std::chrono::system_clock::now() };
+                m_db.set("Disk_Utilization", disk_val.doubleValue);
             }
 
             // GPU is often a sum of multiple engines; simplified here
-            if (PdhGetFormattedCounterValue(m_gpu_counter, PDH_FMT_DOUBLE, NULL, &gpu_val) == ERROR_SUCCESS) {
-                m_db["GPU_Utilization"] = { gpu_val.doubleValue, std::chrono::system_clock::now() };
+            if (m_gpu_counter && PdhGetFormattedCounterValue(m_gpu_counter, PDH_FMT_DOUBLE, NULL, &gpu_val) == ERROR_SUCCESS) {
+                m_db.set("GPU_Utilization", gpu_val.doubleValue);
             }
         }
     }

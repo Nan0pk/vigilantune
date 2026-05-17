@@ -8,6 +8,13 @@ namespace wspa {
           m_memory_info(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)) {
         
         try {
+            // Check if file exists
+            DWORD dwAttrib = GetFileAttributesW(model_path.c_str());
+            if (dwAttrib == INVALID_FILE_ATTRIBUTES || (dwAttrib & FILE_ATTRIBUTE_DIRECTORY)) {
+                std::cerr << "[Inference] Model file not found: " << std::string(model_path.begin(), model_path.end()) << ". Falling back to deterministic logic." << std::endl;
+                return;
+            }
+
             Ort::SessionOptions session_options;
             session_options.SetIntraOpNumThreads(1);
             session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
@@ -27,13 +34,13 @@ namespace wspa {
 
     InferenceManager::~InferenceManager() {}
 
-    std::vector<float> InferenceManager::run_inference(const std::vector<float>& input_tensor_values) {
+    std::vector<float> InferenceManager::run_inference(std::vector<float> input_tensor_values) {
         if (!m_session) return {};
 
         try {
             size_t input_tensor_size = input_tensor_values.size();
             Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
-                m_memory_info, const_cast<float*>(input_tensor_values.data()), input_tensor_size, 
+                m_memory_info, input_tensor_values.data(), input_tensor_size, 
                 m_input_node_dims.data(), m_input_node_dims.size());
 
             auto output_tensors = m_session->Run(

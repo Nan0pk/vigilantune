@@ -15,7 +15,7 @@ namespace wspa {
 
         // Runs inference on a vector of system metrics
         // Inputs: [CPU_Util, Queue_Len, Foreground_Hash, etc.]
-        std::vector<float> run_inference(const std::vector<float>& input_tensor_values);
+        std::vector<float> run_inference(std::vector<float> input_tensor_values);
 
     private:
         Ort::Env m_env;

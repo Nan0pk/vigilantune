@@ -1,6 +1,12 @@
 #include "actuators.hpp"
 #include <iostream>
 #include <cmath>
+#include <initguid.h>
+
+// Processor Settings Subgroup
+DEFINE_GUID(GUID_PROCESSOR_SETTINGS_SUBGROUP, 0x54533251, 0x82be, 0x4824, 0x96, 0xc1, 0x47, 0xb6, 0x0b, 0x74, 0x0d, 0x00);
+// Maximum Processor State
+DEFINE_GUID(GUID_PROCESSOR_THROTTLE_MAX, 0xbcbb0383, 0x0504, 0x42db, 0x9a, 0x3c, 0x90, 0x43, 0xe0, 0x33, 0x8d, 0xd1);
 
 namespace wspa {
     ActuatorManager::ActuatorManager() {
@@ -21,12 +27,18 @@ namespace wspa {
             std::cout << "[Actuator] Applying " << param << " = " << value 
                       << " (Deadband: " << deadband << "%)" << std::endl;
             
-            // In a real implementation, map 'param' to a specific Power GUID
-            // and call update_setting()
-            
-            m_last_applied_values[param] = value;
-        } else {
-            // Filtered by deadband
+            bool success = false;
+            if (param == "PerformanceBoost") {
+                // Map 0-100 to Processor Throttle Max (0-100)
+                DWORD dwValue = (DWORD)value;
+                success = update_setting(&GUID_PROCESSOR_SETTINGS_SUBGROUP, &GUID_PROCESSOR_THROTTLE_MAX, dwValue);
+            }
+
+            if (success) {
+                m_last_applied_values[param] = value;
+            } else {
+                std::cerr << "[Actuator] Failed to apply " << param << std::endl;
+            }
         }
     }
 
@@ -44,7 +56,6 @@ namespace wspa {
         double last_value = m_last_applied_values[param];
         double diff = std::abs(new_value - last_value);
         
-        // Check if change exceeds the deadband threshold
         return diff >= deadband;
     }
 
@@ -54,13 +65,20 @@ namespace wspa {
             std::cerr << "[Actuator] Failed to set active power scheme. Error: " << result << std::endl;
             return false;
         }
-        m_active_scheme = *scheme_guid;
         return true;
     }
 
-    bool ActuatorManager::update_setting(const GUID* scheme_guid, const GUID* sub_group_guid, const GUID* setting_guid, DWORD value) {
-        DWORD result = PowerWriteACValueIndex(NULL, scheme_guid, sub_group_guid, setting_guid, value);
-        if (result != ERROR_SUCCESS) return false;
-        return set_active_scheme(scheme_guid);
+    bool ActuatorManager::update_setting(const GUID* sub_group_guid, const GUID* setting_guid, DWORD value) {
+        // Write both AC and DC value indexes
+        DWORD ac_res = PowerWriteACValueIndex(NULL, &m_active_scheme, sub_group_guid, setting_guid, value);
+        DWORD dc_res = PowerWriteDCValueIndex(NULL, &m_active_scheme, sub_group_guid, setting_guid, value);
+        
+        if (ac_res != ERROR_SUCCESS || dc_res != ERROR_SUCCESS) {
+             std::cerr << "[Actuator] PowerWrite failed. AC: " << ac_res << ", DC: " << dc_res << std::endl;
+             return false;
+        }
+
+        // Re-activating the scheme is necessary for the changes to take effect immediately
+        return set_active_scheme(&m_active_scheme);
     }
 }
