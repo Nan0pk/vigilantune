@@ -1,0 +1,7 @@
+TagDatabaseTest.ConcurrencyStress 3 0.00374393
+TagDatabaseTest.SnapshotConsistency 3 0.00232267
+ControllerTest.SSSCalculation 3 0.00228747
+ControllerTest.DirtyFlagEpsilon 3 0.00250757
+ActuatorTest.DeadbandCalculation 3 0.00250323
+ActuatorTest.AdaptiveFiltering 1 0.0072408
+---

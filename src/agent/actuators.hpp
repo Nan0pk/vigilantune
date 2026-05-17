@@ -22,13 +22,13 @@ namespace wspa {
         
         // Refresh the active scheme from the OS (detect manual user changes)
         void refresh_active_scheme();
+protected:
+    double calculate_deadband(double stress_score);
+    bool should_apply(const std::string& param, double new_value, double deadband);
 
-    private:
-        double calculate_deadband(double stress_score);
-        bool should_apply(const std::string& param, double new_value, double deadband);
+    GUID m_active_scheme;
+    std::map<std::string, double> m_last_applied_values;
+    std::map<std::string, double> m_queued_adjustments;
 
-        GUID m_active_scheme;
-        std::map<std::string, double> m_last_applied_values;
-        std::map<std::string, double> m_queued_adjustments;
     };
 }

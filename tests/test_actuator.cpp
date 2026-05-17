@@ -8,6 +8,7 @@ class TestActuator : public ActuatorManager {
 public:
     using ActuatorManager::calculate_deadband;
     using ActuatorManager::should_apply;
+    using ActuatorManager::m_last_applied_values;
 };
 
 TEST(ActuatorTest, DeadbandCalculation) {
@@ -24,14 +25,13 @@ TEST(ActuatorTest, DeadbandCalculation) {
 TEST(ActuatorTest, AdaptiveFiltering) {
     TestActuator actuator;
     
-    // Initial state
-    actuator.queue_adjustment("PerformanceBoost", 50.0);
-    actuator.commit_changes(50.0); // Medium stress, 5% deadband
+    // Initial state (manual injection to bypass Win32 dependency)
+    actuator.m_last_applied_values["PerformanceBoost"] = 50.0;
     
-    // Small change (3%) - should NOT apply
+    // Small change (3%) - should NOT apply with 5% deadband
     EXPECT_FALSE(actuator.should_apply("PerformanceBoost", 53.0, 5.0));
     
-    // Large change (6%) - should apply
+    // Large change (6%) - should apply with 5% deadband
     EXPECT_TRUE(actuator.should_apply("PerformanceBoost", 56.0, 5.0));
     
     // Switch to High Stress (1% deadband)

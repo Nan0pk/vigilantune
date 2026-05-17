@@ -27,7 +27,7 @@ namespace wspa {
         // Evaluates the current state and returns relative changes + stress score
         ControlResult evaluate(const TagDatabase& db);
 
-    private:
+    protected:
         double calculate_stress_score(const std::unordered_map<std::string, Tag>& db);
         bool is_dirty(const std::unordered_map<std::string, Tag>& db);
         

@@ -2,6 +2,7 @@
 #include <iostream>
 #include <cmath>
 #include <initguid.h>
+#include <algorithm>
 #include "../shared/config.hpp"
 
 // Processor Settings Subgroup
