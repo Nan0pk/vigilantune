@@ -1,4 +1,4 @@
-add_executable(agent main.cpp sensors.cpp actuators.cpp)
+add_executable(agent main.cpp sensors.cpp actuators.cpp controller.cpp)
 target_link_libraries(agent PRIVATE shared)
 
 # Add Win32 libs

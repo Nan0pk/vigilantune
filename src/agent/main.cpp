@@ -5,24 +5,22 @@
 #include "../shared/types.hpp"
 #include "sensors.hpp"
 #include "actuators.hpp"
+#include "controller.hpp"
 
 using namespace wspa;
 
-void control_loop(TagDatabase& db, ActuatorManager& actuators) {
+void control_loop(TagDatabase& db, ActuatorManager& actuators, Controller& controller) {
     while (true) {
-        if (db.count("Foreground_App")) {
-            auto val = std::get<std::string>(db["Foreground_App"].value);
-            std::cout << "[Agent] Current Focus: " << val << std::endl;
+        // Evaluate system state
+        auto adjustments = controller.evaluate(db);
 
-            // Simple Logic: If "Notepad" is in focus, try to switch to Power Saver (hypothetical)
-            if (val.find("Notepad") != std::string::npos) {
-                std::cout << "[Agent] High efficiency app detected. Adjusting power..." << std::endl;
-                // GUID for Power Saver: a1841308-3541-4fab-bc81-f71556f20b4a
-                // We'll just print for safety in this scaffold.
-            }
+        // Apply adjustments if any
+        for (const auto& [param, value] : adjustments) {
+            std::cout << "[Agent] Applying adjustment: " << param << " -> " << value << std::endl;
+            // actuators.update_setting(...)
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 }
 
@@ -32,11 +30,12 @@ int main() {
     TagDatabase db;
     SensorManager sensors(db);
     ActuatorManager actuators;
+    Controller controller;
 
     sensors.start();
 
     // Start AI control loop in a separate thread
-    std::thread ai_thread(control_loop, std::ref(db), std::ref(actuators));
+    std::thread ai_thread(control_loop, std::ref(db), std::ref(actuators), std::ref(controller));
     ai_thread.detach();
 
     // Standard Win32 Message Loop
