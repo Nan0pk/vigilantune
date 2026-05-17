@@ -32,7 +32,12 @@ namespace wspa {
             if (PdhAddCounter(m_query, "\\System\\Processor Queue Length", 0, &m_queue_counter) != ERROR_SUCCESS) any_failed = true;
             if (PdhAddCounter(m_query, "\\PhysicalDisk(_Total)\\% Disk Time", 0, &m_disk_counter) != ERROR_SUCCESS) any_failed = true;
             
-            // GPU is optional as it may not exist on all systems or use different paths
+            // Thermal and GPU are optional
+            if (PdhAddCounter(m_query, "\\Thermal Zone Information(*)\\Temperature", 0, &m_thermal_counter) != ERROR_SUCCESS) {
+                std::cerr << "[Sensors] Thermal counters not found. Thermal telemetry will be disabled." << std::endl;
+                m_thermal_counter = nullptr;
+            }
+
             if (PdhAddCounter(m_query, "\\GPU Engine(*)\\Utilization Percentage", 0, &m_gpu_counter) != ERROR_SUCCESS) {
                 std::cerr << "[Sensors] GPU Performance counters not found. GPU telemetry will be disabled." << std::endl;
                 m_gpu_counter = nullptr;
@@ -95,6 +100,27 @@ namespace wspa {
 
             if (PdhGetFormattedCounterValue(m_disk_counter, PDH_FMT_DOUBLE, NULL, &disk_val) == ERROR_SUCCESS) {
                 m_db.set("Disk_Utilization", disk_val.doubleValue);
+            }
+
+            // Thermal Headroom (Max Temp across zones)
+            if (m_thermal_counter) {
+                DWORD dwBufferSize = 0;
+                DWORD dwItemCount = 0;
+                PdhGetFormattedCounterArrayA(m_thermal_counter, PDH_FMT_DOUBLE, &dwBufferSize, &dwItemCount, NULL);
+                if (dwBufferSize > 0) {
+                    std::vector<char> buffer(dwBufferSize);
+                    if (PdhGetFormattedCounterArrayA(m_thermal_counter, PDH_FMT_DOUBLE, &dwBufferSize, &dwItemCount, (PPDH_FMT_COUNTERVALUE_ITEM_A)buffer.data()) == ERROR_SUCCESS) {
+                        PPDH_FMT_COUNTERVALUE_ITEM_A items = (PPDH_FMT_COUNTERVALUE_ITEM_A)buffer.data();
+                        double max_temp = 0;
+                        for (DWORD i = 0; i < dwItemCount; i++) {
+                            // PDH returns Kelvin * 10 or Celsius depending on the provider.
+                            // Assuming 10ths of Kelvin (standard for some BIOS providers)
+                            double temp_c = (items[i].FmtValue.doubleValue / 10.0) - 273.15;
+                            if (temp_c > max_temp) max_temp = temp_c;
+                        }
+                        m_db.set("Thermal_Headroom", max_temp);
+                    }
+                }
             }
 
             // GPU is a wildcard counter. Use Array API to sum engines.

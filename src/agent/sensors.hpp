@@ -32,6 +32,7 @@ namespace wspa {
         PDH_HCOUNTER m_queue_counter;
         PDH_HCOUNTER m_disk_counter;
         PDH_HCOUNTER m_gpu_counter;
+        PDH_HCOUNTER m_thermal_counter;
 
         std::atomic<bool> m_running;
         static std::atomic<SensorManager*> s_instance;

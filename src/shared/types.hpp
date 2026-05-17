@@ -3,6 +3,7 @@
 #include <map>
 #include <variant>
 #include <chrono>
+#include <unordered_map>
 #include <shared_mutex>
 
 namespace wspa {
@@ -30,7 +31,7 @@ namespace wspa {
             return false;
         }
 
-        std::map<std::string, Tag> get_all() const {
+        std::unordered_map<std::string, Tag> get_all() const {
             std::shared_lock lock(m_mutex);
             return m_data;
         }
@@ -46,7 +47,7 @@ namespace wspa {
         }
 
     private:
-        std::map<std::string, Tag> m_data;
+        std::unordered_map<std::string, Tag> m_data;
         mutable std::shared_mutex m_mutex;
     };
 }

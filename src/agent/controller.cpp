@@ -3,6 +3,7 @@
 #include <variant>
 #include <algorithm>
 #include <cmath>
+#include <unordered_map>
 #include "../shared/config.hpp"
 
 namespace wspa {
@@ -53,7 +54,11 @@ namespace wspa {
         if (m_inference) {
             auto outputs = m_inference->run_inference(inputs);
             if (!outputs.empty()) {
-                result.adjustments["PerformanceBoost"] = outputs[0];
+                // Multi-parameter mapping (as per recommendation #12)
+                static const std::vector<std::string> OUTPUT_PARAMS = { "PerformanceBoost" };
+                for (size_t i = 0; i < std::min(outputs.size(), OUTPUT_PARAMS.size()); ++i) {
+                    result.adjustments[OUTPUT_PARAMS[i]] = outputs[i];
+                }
                 goto cleanup;
             }
         }
@@ -71,9 +76,10 @@ cleanup:
         return result;
     }
 
-    double Controller::calculate_stress_score(const std::map<std::string, Tag>& db) {
+    double Controller::calculate_stress_score(const std::unordered_map<std::string, Tag>& db) {
         double cpu = 0.0;
         int queue = 0;
+        double thermal = 0.0;
 
         if (db.count("CPU_Utilization")) {
             const auto& val = db.at("CPU_Utilization").value;
@@ -83,15 +89,23 @@ cleanup:
             const auto& val = db.at("Thread_Queue_Length").value;
             if (std::holds_alternative<int>(val)) queue = std::get<int>(val);
         }
+        if (db.count("Thermal_Headroom")) {
+            const auto& val = db.at("Thermal_Headroom").value;
+            if (std::holds_alternative<double>(val)) thermal = std::get<double>(val);
+        }
 
-        double sss = (cpu * 0.4) + (std::min(queue * 10, 60) * 0.6);
+        // System Stress Score (SSS) calculation (Recommendation #6)
+        // SSS = (CPU * 0.35) + (Queue * 0.5) + (ThermalPressure * 0.15)
+        double thermal_pressure = std::clamp((thermal - 60.0) / 40.0, 0.0, 1.0) * 100.0;
+        double sss = (cpu * 0.35) + (std::min(queue * 10, 60) * 0.5) + (thermal_pressure * 0.15);
+        
         return std::clamp(sss, 0.0, 100.0);
     }
 
-    bool Controller::is_dirty(const std::map<std::string, Tag>& db) {
+    bool Controller::is_dirty(const std::unordered_map<std::string, Tag>& db) {
         if (m_last_state.size() != db.size()) return true;
         
-        const double EPSILON = 0.1;
+        const double EPSILON = 1.0; // 1.0% change threshold (Recommendation #7)
 
         for (const auto& [name, tag] : db) {
             if (m_last_state.find(name) == m_last_state.end()) return true;
