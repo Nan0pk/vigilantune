@@ -51,7 +51,8 @@ To achieve a near-zero idle resource footprint, WSPA replaces standard polling l
 
 The actuator layer takes the relative adjustments output by the ONNX model and applies them to Windows Power GUIDs (e.g., `GUID_PROCESSOR_THROTTLE_MAX`).
 
-$$\text{SSS} = f(\text{CPU}, \text{Log}(\text{Queue}), \text{Thermal\_Pressure})$$
+$$\text{SSS} = f(\text{CPU}, \text{Log}(\text{Queue}), \text{Thermal Pressure})$$
+
 
 | System Stress Score (SSS) | System State | Deadband Width | Actuator Behavior |
 | --- | --- | --- | --- |
