@@ -3,7 +3,11 @@
 #include <variant>
 
 namespace wspa {
-    Controller::Controller() : m_last_stress_score(0.0) {}
+    Controller::Controller() : m_last_stress_score(0.0) {
+        // In production, this path would be absolute or relative to the executable
+        m_inference = std::make_unique<InferenceManager>(L"models/power_model.onnx");
+    }
+
     Controller::~Controller() {}
 
     ControlResult Controller::evaluate(const TagDatabase& db) {
@@ -14,13 +18,24 @@ namespace wspa {
             return result;
         }
 
-        // Mock adjustments based on stress
-        if (result.stress_score > 70.0) {
-            result.adjustments["PerformanceBoost"] = 100.0; 
-        } else if (result.stress_score < 30.0) {
-            result.adjustments["PerformanceBoost"] = 0.0;
+        // Prepare input tensor for ONNX: [CPU, Queue, Stress, Foreground_Hash, Last_Adjustment]
+        std::vector<float> inputs = {
+            (float)(db.count("CPU_Utilization") ? std::get<double>(db.at("CPU_Utilization").value) : 0.0),
+            (float)(db.count("Thread_Queue_Length") ? std::get<int>(db.at("Thread_Queue_Length").value) : 0),
+            (float)result.stress_score,
+            0.0f, // Foreground Hash placeholder
+            (float)m_last_stress_score
+        };
+
+        auto outputs = m_inference->run_inference(inputs);
+
+        if (!outputs.empty()) {
+            // Map model output (0.0 to 100.0) to PerformanceBoost
+            result.adjustments["PerformanceBoost"] = outputs[0];
         } else {
-            result.adjustments["PerformanceBoost"] = 50.0;
+            // Fallback to mock logic if inference fails
+            if (result.stress_score > 70.0) result.adjustments["PerformanceBoost"] = 100.0;
+            else if (result.stress_score < 30.0) result.adjustments["PerformanceBoost"] = 0.0;
         }
 
         m_last_state = db;

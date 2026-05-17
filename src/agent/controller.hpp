@@ -4,6 +4,8 @@
 #include <vector>
 #include "../shared/types.hpp"
 
+#include "inference.hpp"
+
 namespace wspa {
     struct ControlResult {
         std::map<std::string, double> adjustments;
@@ -24,5 +26,7 @@ namespace wspa {
 
         TagDatabase m_last_state;
         double m_last_stress_score;
+
+        std::unique_ptr<InferenceManager> m_inference;
     };
 }
