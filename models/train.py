@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import os
 import argparse
+import hashlib
 
 # Define the PowerMLP Model
 class PowerMLP(nn.Module):
@@ -36,7 +37,6 @@ def generate_synthetic_data(num_samples=1000):
         last_adj = np.random.uniform(0, 100)
         
         # Target logic: If SSS > 70, Boost = 100; If SSS < 30, Boost = 0; else 50
-        # Add some noise to make it "learnable"
         if sss > 70:
             target = 100.0
         elif sss < 30:
@@ -62,9 +62,6 @@ def train_model(data_path, epochs=100, batch_size=32):
     X = df.iloc[:, :5].values.astype(np.float32)
     y = df.iloc[:, 5].values.astype(np.float32).reshape(-1, 1)
 
-    # Normalize data (optional for this simple case, but good practice)
-    # Note: Agent doesn't normalize yet, so we keep raw ranges or handle in model
-    
     dataset = torch.utils.data.TensorDataset(torch.from_numpy(X), torch.from_numpy(y))
     loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
@@ -93,7 +90,6 @@ def export_onnx(model, output_path):
     model.eval()
     dummy_input = torch.randn(1, 5)
     
-    # Export the model
     torch.onnx.export(
         model,
         dummy_input,
@@ -105,7 +101,18 @@ def export_onnx(model, output_path):
         output_names=['output'],
         dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}}
     )
-    print("Export Complete.")
+    
+    # Calculate SHA-256 for config.hpp
+    sha256_hash = hashlib.sha256()
+    with open(output_path, "rb") as f:
+        for byte_block in iter(lambda: f.read(4096), b""):
+            sha256_hash.update(byte_block)
+    
+    print("-" * 30)
+    print("EXPORT COMPLETE")
+    print(f"SHA-256: {sha256_hash.hexdigest()}")
+    print("Copy the hash above into config::EXPECTED_MODEL_HASH in config.hpp")
+    print("-" * 30)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="WinSCADA Model Training Pipeline")
@@ -114,7 +121,6 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=100)
     args = parser.parse_args()
 
-    # Ensure models directory exists
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
 
     trained_model = train_model(args.data, epochs=args.epochs)

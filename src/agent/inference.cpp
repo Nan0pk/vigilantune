@@ -2,7 +2,12 @@
 #include <iostream>
 #include <numeric>
 #include <windows.h>
+#include <bcrypt.h>
+#include <iomanip>
+#include <sstream>
 #include "../shared/config.hpp"
+
+#pragma comment(lib, "bcrypt.lib")
 
 namespace wspa {
     InferenceManager::InferenceManager(const std::wstring& model_path) 
@@ -10,19 +15,9 @@ namespace wspa {
           m_memory_info(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)) {
         
         try {
-            // Security #2: Model Integrity Verification
-            WIN32_FILE_ATTRIBUTE_DATA fileInfo;
-            if (GetFileAttributesExW(model_path.c_str(), GetFileExInfoStandard, &fileInfo)) {
-                LARGE_INTEGER size;
-                size.HighPart = fileInfo.nFileSizeHigh;
-                size.LowPart = fileInfo.nFileSizeLow;
-                
-                if (config::EXPECTED_MODEL_SIZE > 0 && (size_t)size.QuadPart != config::EXPECTED_MODEL_SIZE) {
-                    std::cerr << "[Security] Model verification failed: Size mismatch. Possible corruption or untrusted model." << std::endl;
-                    return;
-                }
-            } else {
-                std::cerr << "[Inference] Model file not found: " << std::string(model_path.begin(), model_path.end()) << std::endl;
+            // Security #2: Model Integrity Verification (SHA-256)
+            if (!verify_model_hash(model_path, config::EXPECTED_MODEL_HASH)) {
+                std::cerr << "[Security] Model verification failed. Load aborted." << std::endl;
                 return;
             }
 
@@ -51,6 +46,54 @@ namespace wspa {
     }
 
     InferenceManager::~InferenceManager() {}
+
+    bool InferenceManager::verify_model_hash(const std::wstring& path, const std::string& expected_hex_hash) {
+        if (expected_hex_hash.empty()) {
+            std::cout << "[Security] WARNING: No expected hash provided. Running in insecure mode." << std::endl;
+            return true;
+        }
+
+        HANDLE hFile = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (hFile == INVALID_HANDLE_VALUE) return false;
+
+        BCRYPT_ALG_HANDLE hAlg = NULL;
+        BCRYPT_HASH_HANDLE hHash = NULL;
+        NTSTATUS status = BCryptOpenAlgorithmProvider(&hAlg, BCRYPT_SHA256_ALGORITHM, NULL, 0);
+        
+        DWORD cbHashObject = 0, cbData = 0, cbHash = 0;
+        status = BCryptGetProperty(hAlg, BCRYPT_OBJECT_LENGTH, (PBYTE)&cbHashObject, sizeof(DWORD), &cbData, 0);
+        status = BCryptGetProperty(hAlg, BCRYPT_HASH_LENGTH, (PBYTE)&cbHash, sizeof(DWORD), &cbData, 0);
+
+        std::vector<BYTE> hashObject(cbHashObject);
+        std::vector<BYTE> hash(cbHash);
+        status = BCryptCreateHash(hAlg, &hHash, hashObject.data(), cbHashObject, NULL, 0, 0);
+
+        BYTE buffer[4096];
+        DWORD bytesRead;
+        while (ReadFile(hFile, buffer, sizeof(buffer), &bytesRead, NULL) && bytesRead > 0) {
+            BCryptHashData(hHash, buffer, bytesRead, 0);
+        }
+
+        BCryptFinishHash(hHash, hash.data(), cbHash, 0);
+
+        std::stringstream ss;
+        for (BYTE b : hash) ss << std::hex << std::setw(2) << std::setfill('0') << (int)b;
+        std::string actual_hash = ss.str();
+
+        CloseHandle(hFile);
+        BCryptDestroyHash(hHash);
+        BCryptCloseAlgorithmProvider(hAlg, 0);
+
+        if (actual_hash != expected_hex_hash) {
+            std::cerr << "[Security] Hash mismatch!" << std::endl;
+            std::cerr << "  Expected: " << expected_hex_hash << std::endl;
+            std::cerr << "  Actual:   " << actual_hash << std::endl;
+            return false;
+        }
+
+        std::cout << "[Security] SHA-256 Verified: " << actual_hash.substr(0, 8) << "..." << std::endl;
+        return true;
+    }
 
     std::vector<float> InferenceManager::run_inference(std::vector<float> input_tensor_values) {
         if (!m_session) return {};

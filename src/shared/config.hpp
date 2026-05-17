@@ -8,9 +8,9 @@ namespace wspa {
         inline const std::wstring MODEL_PATH = L"models/power_model.onnx";
         inline const std::string TELEMETRY_LOG_PATH = "models/telemetry_log.csv";
         
-        // Security: Model Verification (SHA-256 placeholder or simple checksum)
-        // In production, this would be a real hash of the trusted model
-        inline const size_t EXPECTED_MODEL_SIZE = 0; // Set after training
+        // Security: Model Verification (SHA-256)
+        // Set this to the hash output of models/train.py
+        inline const std::string EXPECTED_MODEL_HASH = ""; 
         
         // Mode
         inline const bool DATA_COLLECTION_MODE = true; 
