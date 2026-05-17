@@ -2,4 +2,4 @@ add_executable(agent main.cpp sensors.cpp actuators.cpp controller.cpp)
 target_link_libraries(agent PRIVATE shared)
 
 # Add Win32 libs
-target_link_libraries(agent PRIVATE User32.lib PowrProf.lib)
+target_link_libraries(agent PRIVATE User32.lib PowrProf.lib Pdh.lib)
