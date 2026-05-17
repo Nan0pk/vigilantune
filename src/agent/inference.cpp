@@ -1,6 +1,7 @@
 #include "inference.hpp"
 #include <iostream>
 #include <numeric>
+#include <windows.h> // Significant #17: Explicit Win32 include
 
 namespace wspa {
     InferenceManager::InferenceManager(const std::wstring& model_path) 
@@ -21,10 +22,19 @@ namespace wspa {
 
             m_session = std::make_unique<Ort::Session>(m_env, model_path.c_str(), session_options);
 
+            // Fix for Significant #13: Query ONNX node names dynamically
+            Ort::AllocatorWithDefaultOptions allocator;
+            for (size_t i = 0; i < m_session->GetInputCount(); ++i) {
+                auto name = m_session->GetInputNameAllocated(i, allocator);
+                m_input_node_names_raw.push_back(name.get());
+            }
+            for (size_t i = 0; i < m_session->GetOutputCount(); ++i) {
+                auto name = m_session->GetOutputNameAllocated(i, allocator);
+                m_output_node_names_raw.push_back(name.get());
+            }
+
             // Hardcoded for the prototype model: [1, 5] tensor input
             m_input_node_dims = {1, 5}; 
-            m_input_node_names = {"input"};
-            m_output_node_names = {"output"};
 
             std::cout << "[Inference] ONNX Session initialized from: " << std::string(model_path.begin(), model_path.end()) << std::endl;
         } catch (const Ort::Exception& e) {
@@ -43,10 +53,16 @@ namespace wspa {
                 m_memory_info, input_tensor_values.data(), input_tensor_size, 
                 m_input_node_dims.data(), m_input_node_dims.size());
 
+            // Convert raw strings to C-strings for API call
+            std::vector<const char*> input_names_c;
+            for (const auto& name : m_input_node_names_raw) input_names_c.push_back(name.c_str());
+            std::vector<const char*> output_names_c;
+            for (const auto& name : m_output_node_names_raw) output_names_c.push_back(name.c_str());
+
             auto output_tensors = m_session->Run(
                 Ort::RunOptions{nullptr}, 
-                m_input_node_names.data(), &input_tensor, 1, 
-                m_output_node_names.data(), 1);
+                input_names_c.data(), &input_tensor, 1, 
+                output_names_c.data(), output_names_c.size());
 
             float* floatarr = output_tensors.front().GetTensorMutableData<float>();
             size_t output_size = output_tensors.front().GetTensorTypeAndShapeInfo().GetElementCount();

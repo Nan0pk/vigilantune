@@ -18,15 +18,28 @@ namespace wspa {
     ControlResult Controller::evaluate(const TagDatabase& db) {
         ControlResult result;
         auto db_snapshot = db.get_all();
-        result.stress_score = calculate_stress_score(db_snapshot);
-
-        if (!is_dirty(db_snapshot)) {
-            return result;
+        
+        // Fix for Significant #9: Ensure evaluation runs on startup
+        if (m_last_state.empty() || is_dirty(db_snapshot)) {
+            result.stress_score = calculate_stress_score(db_snapshot);
+            result.adjustments = compute_adjustments(db_snapshot, result.stress_score);
+            
+            m_last_state = db_snapshot;
+            m_last_stress_score = result.stress_score;
+        } else {
+            result.stress_score = m_last_stress_score;
         }
 
+        return result;
+    }
+
+    // Significant #6: Clean helper instead of goto
+    std::map<std::string, double> Controller::compute_adjustments(const std::unordered_map<std::string, Tag>& snapshot, double stress_score) {
+        std::map<std::string, double> adjustments;
+
         float app_hash = 0.0f;
-        if (db_snapshot.count("Foreground_App")) {
-            const auto& val = db_snapshot.at("Foreground_App").value;
+        if (snapshot.count("Foreground_App")) {
+            const auto& val = snapshot.at("Foreground_App").value;
             if (std::holds_alternative<std::string>(val)) {
                 const std::string& title = std::get<std::string>(val);
                 uint32_t hash = 2166136261u;
@@ -39,41 +52,37 @@ namespace wspa {
         }
 
 #ifndef WSPA_DISABLE_AI
-        std::vector<float> inputs = {
-            (float)(db_snapshot.count("CPU_Utilization") ? 
-                (std::holds_alternative<double>(db_snapshot.at("CPU_Utilization").value) ? std::get<double>(db_snapshot.at("CPU_Utilization").value) : 0.0) 
-                : 0.0),
-            (float)(db_snapshot.count("Thread_Queue_Length") ? 
-                (std::holds_alternative<int>(db_snapshot.at("Thread_Queue_Length").value) ? std::get<int>(db_snapshot.at("Thread_Queue_Length").value) : 0) 
-                : 0),
-            (float)result.stress_score,
-            app_hash,
-            (float)m_last_stress_score
-        };
-
         if (m_inference) {
+            std::vector<float> inputs = {
+                (float)(snapshot.count("CPU_Utilization") ? 
+                    (std::holds_alternative<double>(snapshot.at("CPU_Utilization").value) ? std::get<double>(snapshot.at("CPU_Utilization").value) : 0.0) 
+                    : 0.0),
+                (float)(snapshot.count("Thread_Queue_Length") ? 
+                    (std::holds_alternative<int>(snapshot.at("Thread_Queue_Length").value) ? std::get<int>(snapshot.at("Thread_Queue_Length").value) : 0) 
+                    : 0),
+                (float)stress_score,
+                app_hash,
+                (float)m_last_stress_score
+            };
+
             auto outputs = m_inference->run_inference(inputs);
             if (!outputs.empty()) {
-                // Multi-parameter mapping (as per recommendation #12)
-                static const std::vector<std::string> OUTPUT_PARAMS = { "PerformanceBoost" };
+                // Fix for Significant #12: Multi-parameter mapping
+                static const std::vector<std::string> OUTPUT_PARAMS = { "PerformanceBoost", "ProcessorFloor" };
                 for (size_t i = 0; i < std::min(outputs.size(), OUTPUT_PARAMS.size()); ++i) {
-                    result.adjustments[OUTPUT_PARAMS[i]] = outputs[i];
+                    adjustments[OUTPUT_PARAMS[i]] = outputs[i];
                 }
-                goto cleanup;
+                return adjustments;
             }
         }
 #endif
 
-        if (result.stress_score > 70.0) result.adjustments["PerformanceBoost"] = 100.0;
-        else if (result.stress_score < 30.0) result.adjustments["PerformanceBoost"] = 0.0;
-        else result.adjustments["PerformanceBoost"] = 50.0;
+        // Fallback to mock logic
+        if (stress_score > 70.0) adjustments["PerformanceBoost"] = 100.0;
+        else if (stress_score < 30.0) adjustments["PerformanceBoost"] = 0.0;
+        else adjustments["PerformanceBoost"] = 50.0;
 
-#ifndef WSPA_DISABLE_AI
-cleanup:
-#endif
-        m_last_state = db_snapshot;
-        m_last_stress_score = result.stress_score;
-        return result;
+        return adjustments;
     }
 
     double Controller::calculate_stress_score(const std::unordered_map<std::string, Tag>& db) {
@@ -94,10 +103,13 @@ cleanup:
             if (std::holds_alternative<double>(val)) thermal = std::get<double>(val);
         }
 
-        // System Stress Score (SSS) calculation (Recommendation #6)
-        // SSS = (CPU * 0.35) + (Queue * 0.5) + (ThermalPressure * 0.15)
+        // Fix for Significant #7: Logarithmic scaling for the Thread Queue
+        // queue 1->6->50 maps to ~17->50->100
+        double queue_norm = std::clamp(std::log1p(queue) / std::log1p(50.0) * 100.0, 0.0, 100.0);
+        
+        // System Stress Score (SSS) calculation
         double thermal_pressure = std::clamp((thermal - 60.0) / 40.0, 0.0, 1.0) * 100.0;
-        double sss = (cpu * 0.35) + (std::min(queue * 10, 60) * 0.5) + (thermal_pressure * 0.15);
+        double sss = (cpu * 0.35) + (queue_norm * 0.50) + (thermal_pressure * 0.15);
         
         return std::clamp(sss, 0.0, 100.0);
     }
@@ -105,7 +117,7 @@ cleanup:
     bool Controller::is_dirty(const std::unordered_map<std::string, Tag>& db) {
         if (m_last_state.size() != db.size()) return true;
         
-        const double EPSILON = 1.0; // 1.0% change threshold (Recommendation #7)
+        const double EPSILON = 1.0; // 1.0% change threshold
 
         for (const auto& [name, tag] : db) {
             if (m_last_state.find(name) == m_last_state.end()) return true;

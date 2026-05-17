@@ -1,6 +1,7 @@
 #include "sensors.hpp"
 #include <iostream>
 #include <vector>
+#include <algorithm>
 
 #pragma comment(lib, "pdh.lib")
 
@@ -102,7 +103,7 @@ namespace wspa {
                 m_db.set("Disk_Utilization", disk_val.doubleValue);
             }
 
-            // Thermal Headroom (Max Temp across zones)
+            // Fix for Critical #5: Thermal Kelvin Conversion Auto-detection
             if (m_thermal_counter) {
                 DWORD dwBufferSize = 0;
                 DWORD dwItemCount = 0;
@@ -111,19 +112,27 @@ namespace wspa {
                     std::vector<char> buffer(dwBufferSize);
                     if (PdhGetFormattedCounterArrayA(m_thermal_counter, PDH_FMT_DOUBLE, &dwBufferSize, &dwItemCount, (PPDH_FMT_COUNTERVALUE_ITEM_A)buffer.data()) == ERROR_SUCCESS) {
                         PPDH_FMT_COUNTERVALUE_ITEM_A items = (PPDH_FMT_COUNTERVALUE_ITEM_A)buffer.data();
-                        double max_temp = 0;
+                        double max_temp_c = 0;
                         for (DWORD i = 0; i < dwItemCount; i++) {
-                            // PDH returns Kelvin * 10 or Celsius depending on the provider.
-                            // Assuming 10ths of Kelvin (standard for some BIOS providers)
-                            double temp_c = (items[i].FmtValue.doubleValue / 10.0) - 273.15;
-                            if (temp_c > max_temp) max_temp = temp_c;
+                            double raw = items[i].FmtValue.doubleValue;
+                            double temp_c;
+                            // Tenths-of-Kelvin: range ~2731-3731 for 0-100C
+                            // Plain Kelvin: range ~273-373 for 0-100C
+                            if (raw > 1000.0) {
+                                temp_c = (raw / 10.0) - 273.15;
+                            } else if (raw > 200.0) {
+                                temp_c = raw - 273.15;
+                            } else {
+                                temp_c = raw; // Assume Celsius
+                            }
+                            max_temp_c = std::max(max_temp_c, std::clamp(temp_c, 0.0, 120.0));
                         }
-                        m_db.set("Thermal_Headroom", max_temp);
+                        m_db.set("Thermal_Headroom", max_temp_c);
                     }
                 }
             }
 
-            // GPU is a wildcard counter. Use Array API to sum engines.
+            // Fix for Critical #4: GPU Utilization (Max Engine Proxy)
             if (m_gpu_counter) {
                 DWORD dwBufferSize = 0;
                 DWORD dwItemCount = 0;
@@ -132,12 +141,11 @@ namespace wspa {
                     std::vector<char> buffer(dwBufferSize);
                     if (PdhGetFormattedCounterArrayA(m_gpu_counter, PDH_FMT_DOUBLE, &dwBufferSize, &dwItemCount, (PPDH_FMT_COUNTERVALUE_ITEM_A)buffer.data()) == ERROR_SUCCESS) {
                         PPDH_FMT_COUNTERVALUE_ITEM_A items = (PPDH_FMT_COUNTERVALUE_ITEM_A)buffer.data();
-                        double total = 0;
+                        double max_engine = 0;
                         for (DWORD i = 0; i < dwItemCount; i++) {
-                            total += items[i].FmtValue.doubleValue;
+                            max_engine = std::max(max_engine, items[i].FmtValue.doubleValue);
                         }
-                        // Normalize by engine count if appropriate, or just cap at 100
-                        m_db.set("GPU_Utilization", std::min(total, 100.0));
+                        m_db.set("GPU_Utilization", max_engine);
                     }
                 }
             }

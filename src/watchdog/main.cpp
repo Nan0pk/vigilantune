@@ -27,7 +27,8 @@ int main(int argc, char* argv[]) {
     int recoveryCount = 0;
     const int maxRecoveries = 3;
 
-    while (recoveryCount < maxRecoveries) {
+    // Fix for Critical #3: Watchdog loop off-by-one
+    while (recoveryCount <= maxRecoveries) {
         PROCESS_INFORMATION pi = { 0 };
         if (!StartAgent(agentPath, pi)) {
             std::cerr << "[Watchdog] Failed to start agent at: " << agentPath << " (Error: " << GetLastError() << ")" << std::endl;
@@ -45,7 +46,7 @@ int main(int argc, char* argv[]) {
 
         if (exitCode == 0) {
             std::cout << "[Watchdog] Agent exited cleanly. Exiting watchdog." << std::endl;
-            break;
+            return 0;
         }
 
         recoveryCount++;
@@ -55,7 +56,7 @@ int main(int argc, char* argv[]) {
         PowerSetActiveScheme(NULL, &config::FAILSAFE_SCHEME_GUID);
 
         if (recoveryCount > maxRecoveries) {
-            std::cerr << "[Watchdog] Max recovery attempts reached. System remaining in Fail-Safe mode. Manual intervention required." << std::endl;
+            std::cerr << "[Watchdog] Max recovery attempts reached. Manual intervention required." << std::endl;
             return 1;
         }
 

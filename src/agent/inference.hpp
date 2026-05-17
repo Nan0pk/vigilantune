@@ -23,7 +23,8 @@ namespace wspa {
         Ort::MemoryInfo m_memory_info;
 
         std::vector<int64_t> m_input_node_dims;
-        std::vector<const char*> m_input_node_names;
-        std::vector<const char*> m_output_node_names;
+        // Fix for Significant #12: Harden node name storage to prevent dangling pointers
+        std::vector<std::string> m_input_node_names_raw;
+        std::vector<std::string> m_output_node_names_raw;
     };
 }

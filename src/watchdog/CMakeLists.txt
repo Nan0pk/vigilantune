@@ -1,4 +1,4 @@
 add_executable(watchdog main.cpp)
 
-# Add Win32 libs
-target_link_libraries(watchdog PRIVATE PowrProf.lib)
+# Fix for Significant #8: Link shared and Win32 libs
+target_link_libraries(watchdog PRIVATE shared PowrProf.lib)
