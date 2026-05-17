@@ -6,6 +6,10 @@ namespace wspa {
     namespace config {
         // Paths
         inline const std::wstring MODEL_PATH = L"models/power_model.onnx";
+        inline const std::string TELEMETRY_LOG_PATH = "models/telemetry_log.csv";
+        
+        // Mode
+        inline const bool DATA_COLLECTION_MODE = true; // Set to true to build training dataset
         
         // Intervals (ms)
         inline const int TELEMETRY_INTERVAL_MS = 1000;

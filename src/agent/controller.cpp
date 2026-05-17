@@ -51,20 +51,22 @@ namespace wspa {
             }
         }
 
+        std::vector<float> inputs = {
+            (float)(snapshot.count("CPU_Utilization") ? 
+                (std::holds_alternative<double>(snapshot.at("CPU_Utilization").value) ? std::get<double>(snapshot.at("CPU_Utilization").value) : 0.0) 
+                : 0.0),
+            (float)(snapshot.count("Thread_Queue_Length") ? 
+                (std::holds_alternative<int>(snapshot.at("Thread_Queue_Length").value) ? std::get<int>(snapshot.at("Thread_Queue_Length").value) : 0) 
+                : 0),
+            (float)stress_score,
+            app_hash,
+            (float)m_last_stress_score
+        };
+
+        bool ai_used = false;
+
 #ifndef WSPA_DISABLE_AI
         if (m_inference) {
-            std::vector<float> inputs = {
-                (float)(snapshot.count("CPU_Utilization") ? 
-                    (std::holds_alternative<double>(snapshot.at("CPU_Utilization").value) ? std::get<double>(snapshot.at("CPU_Utilization").value) : 0.0) 
-                    : 0.0),
-                (float)(snapshot.count("Thread_Queue_Length") ? 
-                    (std::holds_alternative<int>(snapshot.at("Thread_Queue_Length").value) ? std::get<int>(snapshot.at("Thread_Queue_Length").value) : 0) 
-                    : 0),
-                (float)stress_score,
-                app_hash,
-                (float)m_last_stress_score
-            };
-
             auto outputs = m_inference->run_inference(inputs);
             if (!outputs.empty()) {
                 // Fix for Significant #12: Multi-parameter mapping
@@ -72,17 +74,45 @@ namespace wspa {
                 for (size_t i = 0; i < std::min(outputs.size(), OUTPUT_PARAMS.size()); ++i) {
                     adjustments[OUTPUT_PARAMS[i]] = outputs[i];
                 }
-                return adjustments;
+                ai_used = true;
             }
         }
 #endif
 
-        // Fallback to mock logic
-        if (stress_score > 70.0) adjustments["PerformanceBoost"] = 100.0;
-        else if (stress_score < 30.0) adjustments["PerformanceBoost"] = 0.0;
-        else adjustments["PerformanceBoost"] = 50.0;
+        if (!ai_used) {
+            // Fallback to mock logic
+            if (stress_score > 70.0) adjustments["PerformanceBoost"] = 100.0;
+            else if (stress_score < 30.0) adjustments["PerformanceBoost"] = 0.0;
+            else adjustments["PerformanceBoost"] = 50.0;
+        }
+
+        // Phase 1: Data Collection (log even if AI is used to build dataset)
+        if (config::DATA_COLLECTION_MODE) {
+            log_snapshot(inputs, adjustments["PerformanceBoost"]);
+        }
 
         return adjustments;
+    }
+
+    void Controller::log_snapshot(const std::vector<float>& inputs, double label) {
+        static bool header_written = false;
+        std::ofstream file(config::TELEMETRY_LOG_PATH, std::ios::app);
+        
+        if (!file.is_open()) return;
+
+        if (!header_written) {
+            // Check if file is empty by seeking to end
+            file.seekp(0, std::ios::end);
+            if (file.tellp() == 0) {
+                file << "CPU_Utilization,Thread_Queue_Length,Stress_Score,App_Hash,Last_Adjustment,PerformanceBoost_Label\n";
+            }
+            header_written = true;
+        }
+
+        for (size_t i = 0; i < inputs.size(); ++i) {
+            file << inputs[i] << (i == inputs.size() - 1 ? "" : ",");
+        }
+        file << "," << label << "\n";
     }
 
     double Controller::calculate_stress_score(const std::unordered_map<std::string, Tag>& db) {
@@ -104,7 +134,6 @@ namespace wspa {
         }
 
         // Fix for Significant #7: Logarithmic scaling for the Thread Queue
-        // queue 1->6->50 maps to ~17->50->100
         double queue_norm = std::clamp(std::log1p(queue) / std::log1p(50.0) * 100.0, 0.0, 100.0);
         
         // System Stress Score (SSS) calculation

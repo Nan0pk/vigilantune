@@ -4,6 +4,7 @@
 #include <vector>
 #include <unordered_map>
 #include <memory>
+#include <fstream>
 #include "../shared/types.hpp"
 
 // Fix for Critical #2: Guard ONNX header include
@@ -28,6 +29,9 @@ namespace wspa {
     private:
         double calculate_stress_score(const std::unordered_map<std::string, Tag>& db);
         bool is_dirty(const std::unordered_map<std::string, Tag>& db);
+        
+        // Phase 1: Data Collection Helper
+        void log_snapshot(const std::vector<float>& inputs, double label);
 
         // Logic helper for adjustments (Significant #6)
         std::map<std::string, double> compute_adjustments(const std::unordered_map<std::string, Tag>& snapshot, double stress_score);
