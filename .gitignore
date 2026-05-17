@@ -88,3 +88,4 @@ power_usage.log
 sysinfo_refreshed.txt
 .gemini/
 .power_mode
+.claude-server-commander/
