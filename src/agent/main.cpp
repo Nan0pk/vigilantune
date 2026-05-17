@@ -19,18 +19,20 @@ void telemetry_thread(SensorManager& sensors) {
 
 void control_loop(TagDatabase& db, ActuatorManager& actuators, Controller& controller) {
     while (true) {
-        auto adjustments = controller.evaluate(db);
+        auto result = controller.evaluate(db);
 
         // Debug logging for refined metrics
         if (db.count("CPU_Utilization") && db.count("Thread_Queue_Length")) {
             double cpu = std::get<double>(db["CPU_Utilization"].value);
             int queue = std::get<int>(db["Thread_Queue_Length"].value);
             std::cout << "\r[Telemetry] CPU: " << std::fixed << std::setprecision(1) << cpu 
-                      << "% | Queue: " << queue << "   " << std::flush;
+                      << "% | Queue: " << queue 
+                      << " | SSS: " << std::setprecision(0) << result.stress_score << "   " << std::flush;
         }
 
-        for (const auto& [param, value] : adjustments) {
-            std::cout << "\n[Agent] AI Adjustment: " << param << " -> " << value << std::endl;
+        // Apply adjustments using the adaptive deadband logic
+        for (const auto& [param, value] : result.adjustments) {
+            actuators.apply_adjustment(param, value, result.stress_score);
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(100));

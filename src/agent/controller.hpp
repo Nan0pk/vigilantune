@@ -5,13 +5,18 @@
 #include "../shared/types.hpp"
 
 namespace wspa {
+    struct ControlResult {
+        std::map<std::string, double> adjustments;
+        double stress_score;
+    };
+
     class Controller {
     public:
         Controller();
         ~Controller();
 
-        // Evaluates the current state and returns relative changes
-        std::map<std::string, double> evaluate(const TagDatabase& db);
+        // Evaluates the current state and returns relative changes + stress score
+        ControlResult evaluate(const TagDatabase& db);
 
     private:
         double calculate_stress_score(const TagDatabase& db);
