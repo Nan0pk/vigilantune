@@ -3,15 +3,20 @@
 #include <thread>
 #include <chrono>
 #include "../shared/types.hpp"
+#include "sensors.hpp"
 
 using namespace wspa;
 
-void sensor_loop(TagDatabase& db) {
+void control_loop(TagDatabase& db) {
     while (true) {
-        // Placeholder for Coalesced Lane
-        // In a real implementation, this would use SetCoalescableTimer
-        std::cout << "[Sensor] Capturing metrics..." << std::endl;
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        // AI Control Loop Logic
+        // For now, just print the current foreground app from the Tag DB
+        if (db.count("Foreground_App")) {
+            auto val = std::get<std::string>(db["Foreground_App"].value);
+            std::cout << "[Agent] Current Focus: " << val << std::endl;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
 }
 
@@ -19,21 +24,21 @@ int main() {
     std::cout << "Windows SCADA Power Agent (WSPA) Starting..." << std::endl;
 
     TagDatabase db;
+    SensorManager sensors(db);
 
-    // Start sensor lane in background
-    std::thread sensor_thread(sensor_loop, std::ref(db));
-    sensor_thread.detach();
+    sensors.start();
 
-    // Main AI Control Loop
-    while (true) {
-        // 1. Snapshot Tag DB
-        // 2. Compute Hash / Check Dirty Flag
-        // 3. Run ONNX Inference
-        // 4. Apply Actuator changes via Power APIs
+    // Start AI control loop in a separate thread
+    std::thread ai_thread(control_loop, std::ref(db));
+    ai_thread.detach();
 
-        std::cout << "[Agent] AI Control Loop running..." << std::endl;
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    // Standard Win32 Message Loop (Required for WinEventHooks)
+    MSG msg;
+    while (GetMessage(&msg, NULL, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
     }
 
+    sensors.stop();
     return 0;
 }
