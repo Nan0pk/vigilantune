@@ -27,7 +27,7 @@ int main(int argc, char* argv[]) {
     int recoveryCount = 0;
     const int maxRecoveries = 3;
 
-    while (recoveryCount <= maxRecoveries) {
+    while (recoveryCount < maxRecoveries) {
         PROCESS_INFORMATION pi = { 0 };
         if (!StartAgent(agentPath, pi)) {
             std::cerr << "[Watchdog] Failed to start agent at: " << agentPath << " (Error: " << GetLastError() << ")" << std::endl;

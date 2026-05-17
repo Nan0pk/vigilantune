@@ -68,10 +68,12 @@ namespace wspa {
         
         SensorManager* instance = s_instance.load();
         if (event == EVENT_SYSTEM_FOREGROUND && instance && instance->m_running) {
-            char windowTitle[256];
-            GetWindowTextA(hwnd, windowTitle, sizeof(windowTitle));
-            
-            instance->m_db.set("Foreground_App", std::string(windowTitle));
+            int length = GetWindowTextLengthA(hwnd);
+            if (length > 0) {
+                std::string windowTitle(length + 1, '\0');
+                GetWindowTextA(hwnd, &windowTitle[0], length + 1);
+                instance->m_db.set("Foreground_App", windowTitle);
+            }
         }
     }
 
@@ -82,7 +84,6 @@ namespace wspa {
             PDH_FMT_COUNTERVALUE cpu_val;
             PDH_FMT_COUNTERVALUE queue_val;
             PDH_FMT_COUNTERVALUE disk_val;
-            PDH_FMT_COUNTERVALUE gpu_val;
 
             if (PdhGetFormattedCounterValue(m_cpu_counter, PDH_FMT_DOUBLE, NULL, &cpu_val) == ERROR_SUCCESS) {
                 m_db.set("CPU_Utilization", cpu_val.doubleValue);
@@ -96,9 +97,23 @@ namespace wspa {
                 m_db.set("Disk_Utilization", disk_val.doubleValue);
             }
 
-            // GPU is often a sum of multiple engines; simplified here
-            if (m_gpu_counter && PdhGetFormattedCounterValue(m_gpu_counter, PDH_FMT_DOUBLE, NULL, &gpu_val) == ERROR_SUCCESS) {
-                m_db.set("GPU_Utilization", gpu_val.doubleValue);
+            // GPU is a wildcard counter. Use Array API to sum engines.
+            if (m_gpu_counter) {
+                DWORD dwBufferSize = 0;
+                DWORD dwItemCount = 0;
+                PdhGetFormattedCounterArrayA(m_gpu_counter, PDH_FMT_DOUBLE, &dwBufferSize, &dwItemCount, NULL);
+                if (dwBufferSize > 0) {
+                    std::vector<char> buffer(dwBufferSize);
+                    if (PdhGetFormattedCounterArrayA(m_gpu_counter, PDH_FMT_DOUBLE, &dwBufferSize, &dwItemCount, (PPDH_FMT_COUNTERVALUE_ITEM_A)buffer.data()) == ERROR_SUCCESS) {
+                        PPDH_FMT_COUNTERVALUE_ITEM_A items = (PPDH_FMT_COUNTERVALUE_ITEM_A)buffer.data();
+                        double total = 0;
+                        for (DWORD i = 0; i < dwItemCount; i++) {
+                            total += items[i].FmtValue.doubleValue;
+                        }
+                        // Normalize by engine count if appropriate, or just cap at 100
+                        m_db.set("GPU_Utilization", std::min(total, 100.0));
+                    }
+                }
             }
         }
     }

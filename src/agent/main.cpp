@@ -63,11 +63,21 @@ int main() {
     // Start AI control loop
     std::thread ai(control_loop, std::ref(db), std::ref(actuators), std::ref(controller));
 
+    // Set console control handler for graceful shutdown
+    SetConsoleCtrlHandler([](DWORD type) -> BOOL {
+        if (type == CTRL_C_EVENT || type == CTRL_BREAK_EVENT) {
+            std::cout << "\n[Main] Shutdown signal received..." << std::endl;
+            g_running = false;
+            PostQuitMessage(0);
+            return TRUE;
+        }
+        return FALSE;
+    }, TRUE);
+
     std::cout << "[Main] System operational. Enter Win32 message loop..." << std::endl;
 
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
-        if (msg.message == WM_QUIT) break;
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
