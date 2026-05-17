@@ -3,8 +3,11 @@
 #include <powrprof.h>
 #include <string>
 #include <vector>
+#include "../shared/config.hpp"
 
 #pragma comment(lib, "PowrProf.lib")
+
+using namespace wspa;
 
 bool StartAgent(const std::string& path, PROCESS_INFORMATION& pi) {
     STARTUPINFOA si = { sizeof(si) };
@@ -48,12 +51,11 @@ int main(int argc, char* argv[]) {
         recoveryCount++;
         std::cout << "[Watchdog] Agent CRASHED (Exit Code: " << exitCode << "). Recovery attempt " << recoveryCount << "/" << maxRecoveries << "..." << std::endl;
 
-        // Reset to Balanced Scheme (GUID: 381b4222-f694-41f0-9685-ff5bb260df2e)
-        GUID balanced_guid = { 0x381b4222, 0xf694, 0x41f0, { 0x96, 0x85, 0xff, 0x5b, 0xb2, 0x60, 0xdf, 0x2e } };
-        PowerSetActiveScheme(NULL, &balanced_guid);
+        // Reset to Fail-Safe Scheme from config
+        PowerSetActiveScheme(NULL, &config::FAILSAFE_SCHEME_GUID);
 
         if (recoveryCount > maxRecoveries) {
-            std::cerr << "[Watchdog] Max recovery attempts reached. System remaining in Balanced mode. Manual intervention required." << std::endl;
+            std::cerr << "[Watchdog] Max recovery attempts reached. System remaining in Fail-Safe mode. Manual intervention required." << std::endl;
             return 1;
         }
 

@@ -3,6 +3,7 @@
 #include <pdh.h>
 #include <string>
 #include <functional>
+#include <atomic>
 #include "../shared/types.hpp"
 
 namespace wspa {
@@ -32,7 +33,7 @@ namespace wspa {
         PDH_HCOUNTER m_disk_counter;
         PDH_HCOUNTER m_gpu_counter;
 
-        bool m_running;
-        static SensorManager* s_instance;
+        std::atomic<bool> m_running;
+        static std::atomic<SensorManager*> s_instance;
     };
 }

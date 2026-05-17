@@ -4,6 +4,7 @@
 #include <chrono>
 #include <iomanip>
 #include <atomic>
+#include <variant>
 #include "../shared/types.hpp"
 #include "sensors.hpp"
 #include "actuators.hpp"
@@ -34,10 +35,13 @@ void control_loop(TagDatabase& db, ActuatorManager& actuators, Controller& contr
                       << " | SSS: " << std::setprecision(0) << result.stress_score << "   " << std::flush;
         }
 
-        // Apply adjustments using the adaptive deadband logic
+        // Queue adjustments (don't apply yet)
         for (const auto& [param, value] : result.adjustments) {
-            actuators.apply_adjustment(param, value, result.stress_score);
+            actuators.queue_adjustment(param, value);
         }
+        
+        // Commit all queued changes in a single batch
+        actuators.commit_changes(result.stress_score);
 
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
@@ -61,7 +65,6 @@ int main() {
 
     std::cout << "[Main] System operational. Enter Win32 message loop..." << std::endl;
 
-    // In a real application, we would handle WM_CLOSE/WM_QUIT to set g_running = false
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
         if (msg.message == WM_QUIT) break;

@@ -5,15 +5,16 @@
 #pragma comment(lib, "pdh.lib")
 
 namespace wspa {
-    SensorManager* SensorManager::s_instance = nullptr;
+    std::atomic<SensorManager*> SensorManager::s_instance = nullptr;
 
     SensorManager::SensorManager(TagDatabase& db) 
         : m_db(db), m_hook(nullptr), m_running(false), m_query(nullptr) {
-        s_instance = this;
+        s_instance.store(this);
     }
 
     SensorManager::~SensorManager() {
         stop();
+        s_instance.store(nullptr);
     }
 
     void SensorManager::start() {
@@ -50,6 +51,7 @@ namespace wspa {
     }
 
     void SensorManager::stop() {
+        m_running = false;
         if (m_hook) {
             UnhookWinEvent(m_hook);
             m_hook = nullptr;
@@ -58,18 +60,18 @@ namespace wspa {
             PdhCloseQuery(m_query);
             m_query = nullptr;
         }
-        m_running = false;
     }
 
     void CALLBACK SensorManager::win_event_proc(
         HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd,
         LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime) {
         
-        if (event == EVENT_SYSTEM_FOREGROUND && s_instance && s_instance->m_running) {
+        SensorManager* instance = s_instance.load();
+        if (event == EVENT_SYSTEM_FOREGROUND && instance && instance->m_running) {
             char windowTitle[256];
             GetWindowTextA(hwnd, windowTitle, sizeof(windowTitle));
             
-            s_instance->m_db.set("Foreground_App", std::string(windowTitle));
+            instance->m_db.set("Foreground_App", std::string(windowTitle));
         }
     }
 
