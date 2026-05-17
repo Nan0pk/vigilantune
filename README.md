@@ -1,4 +1,4 @@
-# Windows SCADA Power Agent (WSPA)
+# 🛡️ Windows SCADA Power Agent (WSPA)
 
 An intelligent, low-overhead background optimization agent designed for Windows. Operating like an industrial Supervisory Control and Data Acquisition (SCADA) system, it dynamically balances system responsiveness and battery longevity by intercepting OS events, evaluating state telemetry via an embedded ONNX machine learning model, and tuning hardware power registers via native Win32 APIs.
 
@@ -11,15 +11,17 @@ The architecture decouples telemetry ingestion (Sensors) from system tuning (Act
 ```
 [ Windows Kernel / Win32 ]
      │      ▲
-     │      │ (1. Event Hooks / 2. Coalesced Timers)
+     │      │ (1. Event Hooks / 2. PDH Coalesced metrics)
      ▼      │
 [ 📊 TAG DATABASE ] <─── Gives Snapshot ─── [ 🧠 ONNX Model ] (Runs every 100ms)
+(std::shared_mutex)                         (MLP Optimizer)
      │                                              │
-     │ (Calculates Stress Score)                    │ (Outputs relative changes)
+     │ (Calculates Stress Score)                    │ (Outputs batched changes)
      ▼                                              ▼
 [ ⚙️ ACTUATOR LAYER ] <── Filtered by Deadband ─────┘
+(Batched Writes)
      │
-     ▼ (Applies Safe GUID Updates)
+     ▼ (Applies Safe GUID Updates / Scheme Re-activation)
 [ Windows Power APIs ]
 ```
 
@@ -32,49 +34,66 @@ The architecture decouples telemetry ingestion (Sensors) from system tuning (Act
 To achieve a near-zero idle resource footprint, WSPA replaces standard polling loops with a specialized dual-lane ingestion pipeline:
 
 * **The Interrupt Lane (Event-Driven):** Uses the native Win32 `SetWinEventHook` API to listen for `EVENT_SYSTEM_FOREGROUND`. The thread sleeps at 0% CPU usage until the OS signals a window state change, immediately updating the `Foreground_App` tag.
-* **The Coalesced Lane (Time-Series Data):** Captures continuous performance metrics (e.g., Thread Queue Length, Utilization, System Wattage) using `SetCoalescableTimer`. By introducing a 10ms tolerance window, Windows batches these sensor wakeups with existing OS timers, maximizing the duration the processor remains in deep sleep states ($C\text{-states}$).
+* **The Coalesced Lane (Time-Series Data):** Captures continuous performance metrics using the Windows **PDH (Performance Data Helper)** API.
+    - **CPU & Disk:** Real-time utilization percentages.
+    - **GPU:** Multi-engine aggregation using wildcard counter arrays.
+    - **Thermal:** Auto-detects Kelvin/Celsius units to monitor `Thermal Zone Information`.
+    - **Thread Queue:** Captured as a leading indicator of system latency.
 
 ### 2. Controller Layer (The AI Loop)
 
-* **Deterministic Evaluation:** The embedded ONNX runtime processes system snapshots at a fixed 100ms interval, ensuring the controller maintains a steady execution cadence and does not overreact to transient micro-spikes.
-* **Dirty Flag Gatekeeper:** Prior to running a full machine learning inference pass, the agent computes a fast hash of the current Tag Database rows. If the hardware state is identical to the previous 100ms cycle (e.g., the user is reading a static document), the ONNX execution block is bypassed entirely to prevent unnecessary CPU cycles.
+* **Thread-Safe Tag Database:** All telemetry is stored in a centralized `std::unordered_map` protected by `std::shared_mutex` (RW-locking), allowing high-frequency concurrent writes from sensors and consistent snapshots for the AI.
+* **Deterministic Evaluation:** Snapshot processing occurs at a fixed 100ms interval.
+* **Dirty Flag Gatekeeper:** Inference is bypassed if the hardware state hasn't changed beyond a **1.0% epsilon** threshold, minimizing idle CPU cycles.
+* **App Hashing:** Foreground window titles are converted to stable **FNV-1a hashes**, allowing the ONNX model to recognize specific software suites without string overhead.
 
 ### 3. Actuator Layer (Adaptive Deadband)
 
-The actuator layer takes the relative adjustments output by the ONNX model and applies them to Windows Power GUIDs. To avoid excessive API write thrashing, it uses a **System Stress Score (SSS)** to drive an **Adaptive Deadband**:
+The actuator layer takes the relative adjustments output by the ONNX model and applies them to Windows Power GUIDs (e.g., `GUID_PROCESSOR_THROTTLE_MAX`).
 
-$$\text{SSS} = f(\text{CPU\_Run\_Queue}, \text{Thermal\_Headroom}, \text{Core\_Utilization})$$
-
-The `CPU_Run_Queue` depth acts as a leading performance indicator and carries exponential weight.
+$$\text{SSS} = f(\text{CPU}, \text{Log}(\text{Queue}), \text{Thermal\_Pressure})$$
 
 | System Stress Score (SSS) | System State | Deadband Width | Actuator Behavior |
 | --- | --- | --- | --- |
-| **High (70–100)** 🚨 | Heavy thread backlog / Low thermal headroom | **0% – 1%** (Ultra-sensitive) | Applies every micro-adjustment instantly to mitigate interface latency. |
-| **Medium (30–69)** ⚖️ | Standard active workflow (Web browsing, editing) | **2% – 5%** (Balanced) | Filters background noise; executes meaningful power shifts. |
-| **Low (0–29)** 💤 | Idle desktop / Static reading | **6% – 10%** (Wide) | Ignores minor shifts to maintain low-power $C\text{-states}$. |
+| **High (70–100)** 🚨 | Heavy backlog / High heat | **0% – 1%** (Ultra-sensitive) | Immediate micro-adjustments for latency mitigation. |
+| **Medium (30–69)** ⚖️ | Standard active workflow | **2% – 5%** (Balanced) | Filters noise; executes meaningful power shifts. |
+| **Low (0–29)** 💤 | Idle / Static reading | **6% – 10%** (Wide) | Ignores minor shifts to maintain deep sleep states ($C\text{-states}$). |
+
+**Optimization:** Changes are queued and applied in a **single batch**, re-activating the Windows Power Scheme exactly once per cycle to prevent kernel-level thrashing.
 
 ### 4. Safety & Recovery Layer (The Watchdog)
 
-To guarantee system stability if the user-space agent crashes, an independent, lightweight Watchdog service (`watchdog.exe`) runs concurrently.
+An independent `watchdog.exe` monitors the agent for maximum reliability.
 
-* **Zero-Overhead Monitoring:** The Watchdog opens a handle to the main agent process and immediately blocks execution using `WaitForSingleObject(hAgent, INFINITE)`. The kernel removes the Watchdog thread from the active scheduling queue, costing 0% CPU.
-* **Fail-Safe Escalation:** The moment the main agent terminates, the Watchdog thread is awakened by a hardware interrupt. It evaluates the process exit code using `GetExitCodeProcess`:
-* If the exit code is `0` (Clean, intentional user shutdown), it closes gracefully.
-* If the exit code is non-zero (Unexpected crash), the Watchdog instantly resets the Windows Power Scheme to default via `powercfg /setactive SCHEME_BALANCED`, increments a recovery counter, and attempts a clean restart up to 3 times before logging a critical error and exiting.
+* **Zero-Overhead Monitoring:** Uses `WaitForSingleObject` kernel primitive (0% CPU idle).
+* **Fail-Safe Escalation:** Upon detecting an agent crash, the watchdog:
+    1. Instantly resets the system to the **Balanced Power Scheme**.
+    2. Attempts a clean restart of the agent (up to 3 times).
+    3. Logs critical failures if manual intervention is required.
+
+---
+
+## 🧠 Offline Training Pipeline
+
+WinSCADA includes a complete PyTorch-based pipeline to train custom power models.
+
+1. **Collect Data:** Set `DATA_COLLECTION_MODE = true` in `src/shared/config.hpp`. The agent will log live telemetry to `models/telemetry_log.csv`.
+2. **Train:** Install dependencies via `models/requirements.txt` and run `python models/train.py`.
+3. **Export:** The script automatically exports a Multi-Layer Perceptron (MLP) to `models/power_model.onnx`.
+4. **Deploy:** The agent will automatically detect and load the new model on the next launch.
 
 ---
 
 ## 📂 Project Repository Structure
 
 ```text
-├── .devcontainer/     # Production environment container configurations
 ├── src/
 │   ├── agent/          # Main process: Sensor lanes, Tag DB, and ONNX engine
-│   ├── watchdog/       # Standalone process supervisor (WaitForSingleObject loop)
-│   └── shared/         # Common Win32 P/Invoke signatures and data structures
-├── models/             # Compiled ONNX execution graphs
-├── .gitignore          # Pre-configured to strip MSVC build artifacts (.obj, .exe, .pdb)
-└── CMakeLists.txt      # Root CMake configuration targeting the MSVC toolchain
+│   ├── watchdog/       # Standalone process supervisor
+│   └── shared/         # Centralized types, configurations, and Win32 helpers
+├── models/             # PyTorch training suite and ONNX model binaries
+├── monitor_power.ps1   # Portable PowerShell telemetry validator (CIM-based)
+└── CMakeLists.txt      # Root CMake configuration targeting MSVC
 ```
 
 ---
@@ -84,33 +103,23 @@ To guarantee system stability if the user-space agent crashes, an independent, l
 ### 📦 Prerequisites
 
 * Windows 10 / 11 (x64 or ARM64)
-* Git
 * CMake (v3.20+)
-* Visual Studio Build Tools (MSVC Compiler)
+* Visual Studio 2022 (MSVC Compiler)
+* [Optional] ONNX Runtime (Detected automatically by CMake)
 
-### 🔨 Compilation & Build Pipeline
+### 🔨 Build Instructions
 
-You can orchestrate your local environment setup or run commands using your terminal agent:
-
-1. Clone the repository:
-```bash
-git clone https://github.com/geminipro123pakistan-ctrl/WinSCADA.git
-cd WinSCADA
+1. Clone and build:
+```powershell
+mkdir build ; cd build
+cmake ..
+cmake --build . --config Release
 ```
 
-2. Generate the build files via CMake and compile:
-
-```bash
-   mkdir build
-   cd build
-   cmake ..
-   cmake --build . --config Release
-```
-
-3. The compiled binaries (`agent.exe` and `watchdog.exe`) will be generated inside the `build/Release/` directory.
+*Note: If ONNX Runtime is not found, the build will automatically disable AI features and use the deterministic fallback logic.*
 
 ---
 
 ## 📜 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License.
