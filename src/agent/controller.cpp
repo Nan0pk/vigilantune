@@ -18,12 +18,25 @@ namespace wspa {
             return result;
         }
 
+        // 3. Foreground App Hashing (FNV-1a)
+        float app_hash = 0.0f;
+        if (db.count("Foreground_App")) {
+            const std::string& title = std::get<std::string>(db.at("Foreground_App").value);
+            uint32_t hash = 2166136261u;
+            for (char c : title) {
+                hash ^= (uint8_t)c;
+                hash *= 16777619u;
+            }
+            // Normalize hash for model input (0.0 to 1.0 range)
+            app_hash = (float)(hash % 1000) / 1000.0f;
+        }
+
         // Prepare input tensor for ONNX: [CPU, Queue, Stress, Foreground_Hash, Last_Adjustment]
         std::vector<float> inputs = {
             (float)(db.count("CPU_Utilization") ? std::get<double>(db.at("CPU_Utilization").value) : 0.0),
             (float)(db.count("Thread_Queue_Length") ? std::get<int>(db.at("Thread_Queue_Length").value) : 0),
             (float)result.stress_score,
-            0.0f, // Foreground Hash placeholder
+            app_hash,
             (float)m_last_stress_score
         };
 

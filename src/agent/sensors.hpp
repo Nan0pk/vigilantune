@@ -29,6 +29,8 @@ namespace wspa {
         PDH_HQUERY m_query;
         PDH_HCOUNTER m_cpu_counter;
         PDH_HCOUNTER m_queue_counter;
+        PDH_HCOUNTER m_disk_counter;
+        PDH_HCOUNTER m_gpu_counter;
 
         bool m_running;
         static SensorManager* s_instance;
