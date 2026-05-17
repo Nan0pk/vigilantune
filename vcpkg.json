@@ -1,0 +1,8 @@
+{
+  "name": "winscada",
+  "version": "1.0.0",
+  "dependencies": [
+    "onnxruntime"
+  ],
+  "builtin-baseline": "813898656722d46e300908865c19280d5b5155f9"
+}

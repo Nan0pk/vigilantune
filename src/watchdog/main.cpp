@@ -3,6 +3,7 @@
 #include <powrprof.h>
 #include <string>
 #include <vector>
+#include <cmath>
 #include "../shared/config.hpp"
 
 #pragma comment(lib, "PowrProf.lib")
@@ -50,17 +51,22 @@ int main(int argc, char* argv[]) {
         }
 
         recoveryCount++;
+        
+        // Security #3: Configurable Safe State
         std::cout << "[Watchdog] Agent CRASHED (Exit Code: " << exitCode << "). Recovery attempt " << recoveryCount << "/" << maxRecoveries << "..." << std::endl;
-
-        // Reset to Fail-Safe Scheme from config
-        PowerSetActiveScheme(NULL, &config::FAILSAFE_SCHEME_GUID);
+        if (PowerSetActiveScheme(NULL, &config::FAILSAFE_SCHEME_GUID) == ERROR_SUCCESS) {
+            std::cout << "[Watchdog] Fail-Safe: Power Scheme reset to configured default." << std::endl;
+        }
 
         if (recoveryCount > maxRecoveries) {
             std::cerr << "[Watchdog] Max recovery attempts reached. Manual intervention required." << std::endl;
             return 1;
         }
 
-        Sleep(2000); // Wait before restarting
+        // Implementation #3: Exponential Backoff (Wait longer after each crash)
+        int wait_seconds = (int)std::pow(2, recoveryCount); 
+        std::cout << "[Watchdog] Waiting " << wait_seconds << " seconds before restart..." << std::endl;
+        Sleep(wait_seconds * 1000);
     }
 
     return 0;

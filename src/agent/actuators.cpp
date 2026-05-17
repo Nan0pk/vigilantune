@@ -18,9 +18,12 @@ namespace wspa {
 
     void ActuatorManager::refresh_active_scheme() {
         GUID* active_guid = nullptr;
-        if (PowerGetActiveScheme(NULL, &active_guid) == ERROR_SUCCESS) {
+        DWORD result = PowerGetActiveScheme(NULL, &active_guid);
+        if (result == ERROR_SUCCESS && active_guid) {
             m_active_scheme = *active_guid;
             LocalFree(active_guid);
+        } else {
+            std::cerr << "[Actuator] Failed to query active power scheme. Error: " << result << std::endl;
         }
     }
 
@@ -31,6 +34,7 @@ namespace wspa {
     bool ActuatorManager::commit_changes(double stress_score) {
         if (m_queued_adjustments.empty()) return true;
 
+        // Implementation #4: Refresh before write to ensure target is valid
         refresh_active_scheme();
 
         double deadband = calculate_deadband(stress_score);
@@ -43,17 +47,21 @@ namespace wspa {
                 
                 bool success = false;
                 if (param == "PerformanceBoost") {
-                    DWORD dwValue = (DWORD)value;
+                    DWORD dwValue = (DWORD)std::clamp(value, 0.0, 100.0);
+                    
+                    // Implementation #2: Verbose Error Handling
                     DWORD ac_res = PowerWriteACValueIndex(NULL, &m_active_scheme, &GUID_PROCESSOR_SETTINGS_SUBGROUP, &GUID_PROCESSOR_THROTTLE_MAX, dwValue);
                     DWORD dc_res = PowerWriteDCValueIndex(NULL, &m_active_scheme, &GUID_PROCESSOR_SETTINGS_SUBGROUP, &GUID_PROCESSOR_THROTTLE_MAX, dwValue);
+                    
+                    if (ac_res != ERROR_SUCCESS) std::cerr << "[Actuator] AC Write failed for " << param << ". Error: " << ac_res << std::endl;
+                    if (dc_res != ERROR_SUCCESS) std::cerr << "[Actuator] DC Write failed for " << param << ". Error: " << dc_res << std::endl;
+                    
                     success = (ac_res == ERROR_SUCCESS && dc_res == ERROR_SUCCESS);
                 }
 
                 if (success) {
                     m_last_applied_values[param] = value;
                     any_change = true;
-                } else {
-                    std::cerr << "[Actuator] Failed to apply " << param << std::endl;
                 }
             }
         }
@@ -61,7 +69,11 @@ namespace wspa {
         m_queued_adjustments.clear();
 
         if (any_change) {
-            return set_active_scheme(&m_active_scheme);
+            DWORD res = PowerSetActiveScheme(NULL, &m_active_scheme);
+            if (res != ERROR_SUCCESS) {
+                std::cerr << "[Actuator] Failed to re-activate scheme. Error: " << res << std::endl;
+                return false;
+            }
         }
 
         return true;

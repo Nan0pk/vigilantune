@@ -1,7 +1,8 @@
 #include "inference.hpp"
 #include <iostream>
 #include <numeric>
-#include <windows.h> // Significant #17: Explicit Win32 include
+#include <windows.h>
+#include "../shared/config.hpp"
 
 namespace wspa {
     InferenceManager::InferenceManager(const std::wstring& model_path) 
@@ -9,10 +10,19 @@ namespace wspa {
           m_memory_info(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)) {
         
         try {
-            // Check if file exists
-            DWORD dwAttrib = GetFileAttributesW(model_path.c_str());
-            if (dwAttrib == INVALID_FILE_ATTRIBUTES || (dwAttrib & FILE_ATTRIBUTE_DIRECTORY)) {
-                std::cerr << "[Inference] Model file not found: " << std::string(model_path.begin(), model_path.end()) << ". Falling back to deterministic logic." << std::endl;
+            // Security #2: Model Integrity Verification
+            WIN32_FILE_ATTRIBUTE_DATA fileInfo;
+            if (GetFileAttributesExW(model_path.c_str(), GetFileExInfoStandard, &fileInfo)) {
+                LARGE_INTEGER size;
+                size.HighPart = fileInfo.nFileSizeHigh;
+                size.LowPart = fileInfo.nFileSizeLow;
+                
+                if (config::EXPECTED_MODEL_SIZE > 0 && (size_t)size.QuadPart != config::EXPECTED_MODEL_SIZE) {
+                    std::cerr << "[Security] Model verification failed: Size mismatch. Possible corruption or untrusted model." << std::endl;
+                    return;
+                }
+            } else {
+                std::cerr << "[Inference] Model file not found: " << std::string(model_path.begin(), model_path.end()) << std::endl;
                 return;
             }
 
@@ -22,7 +32,6 @@ namespace wspa {
 
             m_session = std::make_unique<Ort::Session>(m_env, model_path.c_str(), session_options);
 
-            // Fix for Significant #13: Query ONNX node names dynamically
             Ort::AllocatorWithDefaultOptions allocator;
             for (size_t i = 0; i < m_session->GetInputCount(); ++i) {
                 auto name = m_session->GetInputNameAllocated(i, allocator);
@@ -33,12 +42,11 @@ namespace wspa {
                 m_output_node_names_raw.push_back(name.get());
             }
 
-            // Hardcoded for the prototype model: [1, 5] tensor input
             m_input_node_dims = {1, 5}; 
 
-            std::cout << "[Inference] ONNX Session initialized from: " << std::string(model_path.begin(), model_path.end()) << std::endl;
+            std::cout << "[Inference] ONNX Session verified and initialized." << std::endl;
         } catch (const Ort::Exception& e) {
-            std::cerr << "[Inference] Error: " << e.what() << std::endl;
+            std::cerr << "[Inference] ORT Exception: " << e.what() << std::endl;
         }
     }
 
@@ -53,7 +61,6 @@ namespace wspa {
                 m_memory_info, input_tensor_values.data(), input_tensor_size, 
                 m_input_node_dims.data(), m_input_node_dims.size());
 
-            // Convert raw strings to C-strings for API call
             std::vector<const char*> input_names_c;
             for (const auto& name : m_input_node_names_raw) input_names_c.push_back(name.c_str());
             std::vector<const char*> output_names_c;

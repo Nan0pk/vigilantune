@@ -16,6 +16,7 @@ namespace wspa {
     struct ControlResult {
         std::map<std::string, double> adjustments;
         double stress_score;
+        int recommended_interval_ms; // Added for Adaptive Loop (Architecture #3)
     };
 
     class Controller {

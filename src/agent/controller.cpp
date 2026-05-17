@@ -19,21 +19,24 @@ namespace wspa {
         ControlResult result;
         auto db_snapshot = db.get_all();
         
-        // Fix for Significant #9: Ensure evaluation runs on startup
+        result.stress_score = calculate_stress_score(db_snapshot);
+        
+        // Architecture #3: Adaptive Loop Interval
+        // Higher stress -> lower interval (faster response)
+        double stress_norm = result.stress_score / 100.0;
+        result.recommended_interval_ms = (int)(config::MAX_CONTROL_LOOP_INTERVAL_MS - 
+            (stress_norm * (config::MAX_CONTROL_LOOP_INTERVAL_MS - config::MIN_CONTROL_LOOP_INTERVAL_MS)));
+
         if (m_last_state.empty() || is_dirty(db_snapshot)) {
-            result.stress_score = calculate_stress_score(db_snapshot);
             result.adjustments = compute_adjustments(db_snapshot, result.stress_score);
             
             m_last_state = db_snapshot;
             m_last_stress_score = result.stress_score;
-        } else {
-            result.stress_score = m_last_stress_score;
         }
 
         return result;
     }
 
-    // Significant #6: Clean helper instead of goto
     std::map<std::string, double> Controller::compute_adjustments(const std::unordered_map<std::string, Tag>& snapshot, double stress_score) {
         std::map<std::string, double> adjustments;
 
@@ -69,7 +72,6 @@ namespace wspa {
         if (m_inference) {
             auto outputs = m_inference->run_inference(inputs);
             if (!outputs.empty()) {
-                // Fix for Significant #12: Multi-parameter mapping
                 static const std::vector<std::string> OUTPUT_PARAMS = { "PerformanceBoost", "ProcessorFloor" };
                 for (size_t i = 0; i < std::min(outputs.size(), OUTPUT_PARAMS.size()); ++i) {
                     adjustments[OUTPUT_PARAMS[i]] = outputs[i];
@@ -80,13 +82,11 @@ namespace wspa {
 #endif
 
         if (!ai_used) {
-            // Fallback to mock logic
             if (stress_score > 70.0) adjustments["PerformanceBoost"] = 100.0;
             else if (stress_score < 30.0) adjustments["PerformanceBoost"] = 0.0;
             else adjustments["PerformanceBoost"] = 50.0;
         }
 
-        // Phase 1: Data Collection (log even if AI is used to build dataset)
         if (config::DATA_COLLECTION_MODE) {
             log_snapshot(inputs, adjustments["PerformanceBoost"]);
         }
@@ -101,7 +101,6 @@ namespace wspa {
         if (!file.is_open()) return;
 
         if (!header_written) {
-            // Check if file is empty by seeking to end
             file.seekp(0, std::ios::end);
             if (file.tellp() == 0) {
                 file << "CPU_Utilization,Thread_Queue_Length,Stress_Score,App_Hash,Last_Adjustment,PerformanceBoost_Label\n";
@@ -133,12 +132,13 @@ namespace wspa {
             if (std::holds_alternative<double>(val)) thermal = std::get<double>(val);
         }
 
-        // Fix for Significant #7: Logarithmic scaling for the Thread Queue
         double queue_norm = std::clamp(std::log1p(queue) / std::log1p(50.0) * 100.0, 0.0, 100.0);
-        
-        // System Stress Score (SSS) calculation
         double thermal_pressure = std::clamp((thermal - 60.0) / 40.0, 0.0, 1.0) * 100.0;
-        double sss = (cpu * 0.35) + (queue_norm * 0.50) + (thermal_pressure * 0.15);
+        
+        // Implementation #1: Use configured weights
+        double sss = (cpu * config::SSS_CPU_WEIGHT) + 
+                     (queue_norm * config::SSS_QUEUE_WEIGHT) + 
+                     (thermal_pressure * config::SSS_THERMAL_WEIGHT);
         
         return std::clamp(sss, 0.0, 100.0);
     }
@@ -146,8 +146,6 @@ namespace wspa {
     bool Controller::is_dirty(const std::unordered_map<std::string, Tag>& db) {
         if (m_last_state.size() != db.size()) return true;
         
-        const double EPSILON = 1.0; // 1.0% change threshold
-
         for (const auto& [name, tag] : db) {
             if (m_last_state.find(name) == m_last_state.end()) return true;
             
@@ -157,13 +155,10 @@ namespace wspa {
             if (new_val.index() != last_val.index()) return true;
 
             if (std::holds_alternative<double>(new_val)) {
-                if (std::abs(std::get<double>(new_val) - std::get<double>(last_val)) > EPSILON) return true;
-            } else if (std::holds_alternative<int>(new_val)) {
-                if (std::get<int>(new_val) != std::get<int>(last_val)) return true;
-            } else if (std::holds_alternative<std::string>(new_val)) {
-                if (std::get<std::string>(new_val) != std::get<std::string>(last_val)) return true;
-            } else if (std::holds_alternative<bool>(new_val)) {
-                if (std::get<bool>(new_val) != std::get<bool>(last_val)) return true;
+                // Implementation #1: Use configured epsilon
+                if (std::abs(std::get<double>(new_val) - std::get<double>(last_val)) > config::DIRTY_FLAG_EPSILON) return true;
+            } else if (tag.value != last_val) {
+                return true;
             }
         }
         return false;
