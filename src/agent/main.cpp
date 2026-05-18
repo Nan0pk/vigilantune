@@ -67,7 +67,18 @@ void telemetry_thread(SensorManager& sensors) {
     }
 }
 
-void control_loop(TagDatabase& db, ActuatorManager& actuators, Controller& controller, ProcessGovernor& governor) {
+void governor_thread(ProcessGovernor& governor) {
+    while (g_running) {
+        if (!g_suspended && !g_battery_saver) {
+            governor.govern();
+        }
+        
+        std::unique_lock<std::mutex> lock(g_shutdown_mutex);
+        g_shutdown_cv.wait_for(lock, std::chrono::milliseconds(10000), [] { return !g_running.load(); });
+    }
+}
+
+void control_loop(TagDatabase& db, ActuatorManager& actuators, Controller& controller) {
     int interval_ms = config::MAX_CONTROL_LOOP_INTERVAL_MS;
     
     while (g_running) {
@@ -81,27 +92,16 @@ void control_loop(TagDatabase& db, ActuatorManager& actuators, Controller& contr
         interval_ms = result.recommended_interval_ms;
         
         // ... (rest of telemetry print logic)
-        Tag cpu_tag, queue_tag;
-        if (db.get("CPU_Utilization", cpu_tag) && db.get("Thread_Queue_Length", queue_tag)) {
-            double cpu = std::get<double>(cpu_tag.value);
-            int queue = std::get<int>(queue_tag.value);
-            std::cout << "\r[Telemetry] CPU: " << std::fixed << std::setprecision(1) << cpu 
-                      << "% | Queue: " << queue 
-                      << " | SSS: " << std::setprecision(0) << result.stress_score 
-                      << " | Interval: " << interval_ms << "ms   " << std::flush;
-        }
+        double cpu = db.get(TagID::CPU_Utilization);
+        int queue = (int)db.get(TagID::Thread_Queue_Length);
+        std::cout << "\r[Telemetry] CPU: " << std::fixed << std::setprecision(1) << cpu 
+                  << "% | Queue: " << queue 
+                  << " | SSS: " << std::setprecision(0) << result.stress_score 
+                  << " | Interval: " << interval_ms << "ms   " << std::flush;
 
         // Apply Global Actuations
-        for (const auto& [param, value] : result.adjustments) {
-            actuators.queue_adjustment(param, value);
-        }
+        actuators.queue_adjustments(result.adjustments);
         actuators.commit_changes(result.stress_score);
-
-        // Apply Process-Level Governance (Surgical Topology Management)
-        HWND foreground_hwnd = GetForegroundWindow();
-        DWORD foreground_pid = 0;
-        GetWindowThreadProcessId(foreground_hwnd, &foreground_pid);
-        governor.govern(foreground_pid);
 
         // Architecture #1: Mutual Monitoring - Alert if watchdog is missing
         static int watchdog_check_counter = 0;
@@ -172,7 +172,8 @@ int main() {
     HPOWERNOTIFY hBatteryNotify = RegisterPowerSettingNotification(hwnd, &GUID_POWER_SAVING_STATUS, DEVICE_NOTIFY_WINDOW_HANDLE);
 
     std::thread telemetry(telemetry_thread, std::ref(sensors));
-    std::thread ai(control_loop, std::ref(db), std::ref(actuators), std::ref(controller), std::ref(governor));
+    std::thread ai(control_loop, std::ref(db), std::ref(actuators), std::ref(controller));
+    std::thread gov(governor_thread, std::ref(governor));
 
     SetConsoleCtrlHandler([](DWORD type) -> BOOL {
         if (type == CTRL_C_EVENT || type == CTRL_BREAK_EVENT) {
@@ -209,6 +210,7 @@ int main() {
     
     if (telemetry.joinable()) telemetry.join();
     if (ai.joinable()) ai.join();
+    if (gov.joinable()) gov.join();
 
     sensors.stop();
     return 0;

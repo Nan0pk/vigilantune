@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <powrprof.h>
 #include <pdhmsg.h>
+#include <thread>
 
 #pragma comment(lib, "pdh.lib")
 #pragma comment(lib, "PowrProf.lib")
@@ -94,7 +95,15 @@ namespace wspa {
             if (length > 0) {
                 std::string windowTitle(length + 1, '\0');
                 GetWindowTextA(hwnd, &windowTitle[0], length + 1);
-                instance->m_db.set("Foreground_App", windowTitle);
+                
+                // Hash string immediately to maintain lock-free purely numeric TagDatabase
+                uint32_t hash = 2166136261u;
+                for (char c : windowTitle) {
+                    if (c == '\0') break;
+                    hash ^= (uint8_t)c;
+                    hash *= 16777619u;
+                }
+                instance->m_db.set(TagID::Foreground_App_Hash, (double)hash);
             }
         }
 
@@ -111,23 +120,22 @@ namespace wspa {
 
             if (PdhGetFormattedCounterValue(m_cpu_counter, PDH_FMT_DOUBLE, NULL, &cpu_val) == ERROR_SUCCESS) {
                 if (cpu_val.CStatus == PDH_CSTATUS_VALID_DATA || cpu_val.CStatus == PDH_CSTATUS_NEW_DATA) {
-                    m_db.set("CPU_Utilization", std::clamp(cpu_val.doubleValue, 0.0, 100.0));
+                    m_db.set(TagID::CPU_Utilization, std::clamp(cpu_val.doubleValue, 0.0, 100.0));
                 }
             }
 
             if (PdhGetFormattedCounterValue(m_queue_counter, PDH_FMT_LONG, NULL, &queue_val) == ERROR_SUCCESS) {
                 if (queue_val.CStatus == PDH_CSTATUS_VALID_DATA || queue_val.CStatus == PDH_CSTATUS_NEW_DATA) {
-                    m_db.set("Thread_Queue_Length", (int)std::max(0L, queue_val.longValue));
+                    m_db.set(TagID::Thread_Queue_Length, (double)std::max(0L, queue_val.longValue));
                 }
             }
 
             if (PdhGetFormattedCounterValue(m_disk_counter, PDH_FMT_DOUBLE, NULL, &disk_val) == ERROR_SUCCESS) {
                 if (disk_val.CStatus == PDH_CSTATUS_VALID_DATA || disk_val.CStatus == PDH_CSTATUS_NEW_DATA) {
-                    m_db.set("Disk_Utilization", std::clamp(disk_val.doubleValue, 0.0, 100.0));
+                    m_db.set(TagID::Disk_Utilization, std::clamp(disk_val.doubleValue, 0.0, 100.0));
                 }
             }
 
-            // Fix for Critical #5: Thermal Kelvin Conversion Auto-detection
             if (m_thermal_counter) {
                 DWORD dwBufferSize = 0;
                 DWORD dwItemCount = 0;
@@ -142,23 +150,17 @@ namespace wspa {
                             
                             double raw = items[i].FmtValue.doubleValue;
                             double temp_c;
-                            // Tenths-of-Kelvin: range ~2731-3731 for 0-100C
-                            // Plain Kelvin: range ~273-373 for 0-100C
-                            if (raw > 1000.0) {
-                                temp_c = (raw / 10.0) - 273.15;
-                            } else if (raw > 200.0) {
-                                temp_c = raw - 273.15;
-                            } else {
-                                temp_c = raw; // Assume Celsius
-                            }
+                            if (raw > 1000.0) temp_c = (raw / 10.0) - 273.15;
+                            else if (raw > 200.0) temp_c = raw - 273.15;
+                            else temp_c = raw;
+                            
                             max_temp_c = std::max(max_temp_c, std::clamp(temp_c, 0.0, 120.0));
                         }
-                        m_db.set("Thermal_Headroom", max_temp_c);
+                        m_db.set(TagID::Thermal_Headroom, max_temp_c);
                     }
                 }
             }
 
-            // Gap #3: GPU Utilization (Max Engine Proxy)
             if (m_gpu_counter) {
                 DWORD dwBufferSize = 0;
                 DWORD dwItemCount = 0;
@@ -173,7 +175,7 @@ namespace wspa {
                                 max_engine = std::max(max_engine, std::clamp(items[i].FmtValue.doubleValue, 0.0, 100.0));
                             }
                         }
-                        m_db.set("GPU_Utilization", max_engine);
+                        m_db.set(TagID::GPU_Utilization, max_engine);
                     }
                 }
             }
@@ -183,7 +185,6 @@ namespace wspa {
     typedef NTSTATUS (NTAPI *NtQueryTimerResolutionPtr)(PULONG MinimumResolution, PULONG MaximumResolution, PULONG CurrentResolution);
 
     void SensorManager::collect_high_fidelity_metrics() {
-        // 1. Gap #4: Per-core High Fidelity Telemetry
         SYSTEM_INFO sysInfo;
         GetSystemInfo(&sysInfo);
         int coreCount = sysInfo.dwNumberOfProcessors;
@@ -196,18 +197,16 @@ namespace wspa {
                 avg_mhz += ppi[i].CurrentMhz;
                 max_limit = std::max(max_limit, (double)ppi[i].MhzLimit);
             }
-            m_db.set("CPU_Frequency_Avg", avg_mhz / coreCount);
-            m_db.set("CPU_Thermal_Limit", max_limit);
+            m_db.set(TagID::CPU_Frequency_Avg, avg_mhz / coreCount);
+            m_db.set(TagID::CPU_Thermal_Limit, max_limit);
         }
 
-        // 2. Gap #8: Timer Resolution Pollution Detection
         static NtQueryTimerResolutionPtr NtQueryTimerResolution = (NtQueryTimerResolutionPtr)GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtQueryTimerResolution");
         if (NtQueryTimerResolution) {
             ULONG minRes, maxRes, currentRes;
             if (NtQueryTimerResolution(&minRes, &maxRes, &currentRes) == 0) {
-                // If currentRes < 1.0ms (10000 units of 100ns), someone has requested high resolution
-                m_db.set("Timer_Resolution_100ns", (int)currentRes);
-                m_db.set("Timer_Pollution", (currentRes < 10000));
+                m_db.set(TagID::Timer_Resolution_100ns, (double)currentRes);
+                m_db.set(TagID::Timer_Pollution, (currentRes < 10000) ? 1.0 : 0.0);
             }
         }
     }

@@ -17,7 +17,7 @@ namespace wspa {
 
     ControlResult Controller::evaluate(const TagDatabase& db) {
         ControlResult result;
-        auto db_snapshot = db.get_all();
+        auto db_snapshot = db.get_snapshot();
         
         result.stress_score = calculate_stress_score(db_snapshot);
         
@@ -27,55 +27,38 @@ namespace wspa {
         result.recommended_interval_ms = (int)(config::MAX_CONTROL_LOOP_INTERVAL_MS - 
             (stress_norm * (config::MAX_CONTROL_LOOP_INTERVAL_MS - config::MIN_CONTROL_LOOP_INTERVAL_MS)));
 
-        if (m_last_state.empty() || is_dirty(db_snapshot)) {
+        if (m_first_run || db_snapshot.is_dirty(m_last_state, config::DIRTY_FLAG_EPSILON)) {
             result.adjustments = compute_adjustments(db_snapshot, result.stress_score);
             
             m_last_state = db_snapshot;
             m_last_stress_score = result.stress_score;
+            m_first_run = false;
         }
 
         return result;
     }
 
-    std::map<std::string, double> Controller::compute_adjustments(const std::unordered_map<std::string, Tag>& snapshot, double stress_score) {
-        std::map<std::string, double> adjustments;
+    ActuationSet Controller::compute_adjustments(const TagSnapshot& snapshot, double stress_score) {
+        ActuationSet adjustments;
 
-        float app_hash = 0.0f;
-        if (snapshot.count("Foreground_App")) {
-            const auto& val = snapshot.at("Foreground_App").value;
-            if (std::holds_alternative<std::string>(val)) {
-                const std::string& title = std::get<std::string>(val);
-                uint32_t hash = 2166136261u;
-                for (char c : title) {
-                    hash ^= (uint8_t)c;
-                    hash *= 16777619u;
-                }
-                app_hash = (float)(hash % config::APP_HASH_BUCKETS) / (float)config::APP_HASH_BUCKETS;
-            }
-        }
+        float app_hash = (float)snapshot.values[static_cast<size_t>(TagID::Foreground_App_Hash)];
 
-        std::vector<float> inputs = {
-            (float)(snapshot.count("CPU_Utilization") ? 
-                (std::holds_alternative<double>(snapshot.at("CPU_Utilization").value) ? std::get<double>(snapshot.at("CPU_Utilization").value) : 0.0) 
-                : 0.0),
-            (float)(snapshot.count("Thread_Queue_Length") ? 
-                (std::holds_alternative<int>(snapshot.at("Thread_Queue_Length").value) ? std::get<int>(snapshot.at("Thread_Queue_Length").value) : 0) 
-                : 0),
-            (float)stress_score,
-            app_hash,
-            (float)m_last_stress_score
-        };
+        m_inference_inputs[0] = (float)snapshot.values[static_cast<size_t>(TagID::CPU_Utilization)];
+        m_inference_inputs[1] = (float)snapshot.values[static_cast<size_t>(TagID::Thread_Queue_Length)];
+        m_inference_inputs[2] = (float)stress_score;
+        m_inference_inputs[3] = app_hash;
+        m_inference_inputs[4] = (float)m_last_stress_score;
 
         bool ai_used = false;
 
 #ifndef WSPA_DISABLE_AI
         if (m_inference) {
-            auto outputs = m_inference->run_inference(inputs);
+            // InferenceManager expects vector for now. We will optimize InferenceManager later.
+            std::vector<float> in_vec(m_inference_inputs.begin(), m_inference_inputs.end());
+            auto outputs = m_inference->run_inference(in_vec);
             if (!outputs.empty()) {
-                static const std::vector<std::string> OUTPUT_PARAMS = { "PerformanceBoost", "ProcessorFloor" };
-                for (size_t i = 0; i < std::min(outputs.size(), OUTPUT_PARAMS.size()); ++i) {
-                    adjustments[OUTPUT_PARAMS[i]] = outputs[i];
-                }
+                if (outputs.size() > 0) adjustments.set(ActuatorID::PerformanceBoost, outputs[0]);
+                if (outputs.size() > 1) adjustments.set(ActuatorID::ProcessorFloor, outputs[1]);
                 ai_used = true;
             }
         }
@@ -84,27 +67,27 @@ namespace wspa {
         if (!ai_used) {
             // P1 Fix: Improved fallback controller with linear interpolation instead of hardcoded 3-stage thresholds
             if (stress_score >= 70.0) {
-                adjustments["PerformanceBoost"] = 100.0;
-                adjustments["ProcessorFloor"] = 50.0;
+                adjustments.set(ActuatorID::PerformanceBoost, 100.0);
+                adjustments.set(ActuatorID::ProcessorFloor, 50.0);
             } else if (stress_score <= 30.0) {
-                adjustments["PerformanceBoost"] = 0.0;
-                adjustments["ProcessorFloor"] = 0.0;
+                adjustments.set(ActuatorID::PerformanceBoost, 0.0);
+                adjustments.set(ActuatorID::ProcessorFloor, 0.0);
             } else {
                 // Linear scale between 30% and 70% stress
                 double ratio = (stress_score - 30.0) / 40.0;
-                adjustments["PerformanceBoost"] = ratio * 100.0;
-                adjustments["ProcessorFloor"] = ratio * 50.0;
+                adjustments.set(ActuatorID::PerformanceBoost, ratio * 100.0);
+                adjustments.set(ActuatorID::ProcessorFloor, ratio * 50.0);
             }
         }
 
         if (config::DATA_COLLECTION_MODE) {
-            log_snapshot(inputs, adjustments["PerformanceBoost"]);
+            log_snapshot(m_inference_inputs, adjustments.values[static_cast<size_t>(ActuatorID::PerformanceBoost)]);
         }
 
         return adjustments;
     }
 
-    void Controller::log_snapshot(const std::vector<float>& inputs, double label) {
+    void Controller::log_snapshot(const std::array<float, 5>& inputs, double label) {
         static bool header_written = false;
         std::ofstream file(config::TELEMETRY_LOG_PATH, std::ios::app);
         
@@ -124,33 +107,12 @@ namespace wspa {
         file << "," << label << "\n";
     }
 
-    double Controller::calculate_stress_score(const std::unordered_map<std::string, Tag>& db) {
-        double cpu = 0.0;
-        int queue = 0;
-        double thermal = 0.0;
-        double gpu = 0.0;
-        double disk = 0.0;
-
-        if (db.count("CPU_Utilization")) {
-            const auto& val = db.at("CPU_Utilization").value;
-            if (std::holds_alternative<double>(val)) cpu = std::get<double>(val);
-        }
-        if (db.count("Thread_Queue_Length")) {
-            const auto& val = db.at("Thread_Queue_Length").value;
-            if (std::holds_alternative<int>(val)) queue = std::get<int>(val);
-        }
-        if (db.count("Thermal_Headroom")) {
-            const auto& val = db.at("Thermal_Headroom").value;
-            if (std::holds_alternative<double>(val)) thermal = std::get<double>(val);
-        }
-        if (db.count("GPU_Utilization")) {
-            const auto& val = db.at("GPU_Utilization").value;
-            if (std::holds_alternative<double>(val)) gpu = std::get<double>(val);
-        }
-        if (db.count("Disk_Utilization")) {
-            const auto& val = db.at("Disk_Utilization").value;
-            if (std::holds_alternative<double>(val)) disk = std::get<double>(val);
-        }
+    double Controller::calculate_stress_score(const TagSnapshot& db) {
+        double cpu = db.values[static_cast<size_t>(TagID::CPU_Utilization)];
+        int queue = (int)db.values[static_cast<size_t>(TagID::Thread_Queue_Length)];
+        double thermal = db.values[static_cast<size_t>(TagID::Thermal_Headroom)];
+        double gpu = db.values[static_cast<size_t>(TagID::GPU_Utilization)];
+        double disk = db.values[static_cast<size_t>(TagID::Disk_Utilization)];
 
         double queue_norm = std::clamp(std::log1p(queue) / std::log1p(50.0) * 100.0, 0.0, 100.0);
         double thermal_pressure = std::clamp((thermal - 60.0) / 40.0, 0.0, 1.0) * 100.0;
@@ -163,26 +125,5 @@ namespace wspa {
                      (disk * config::SSS_DISK_WEIGHT);
         
         return std::clamp(sss, 0.0, 100.0);
-    }
-
-    bool Controller::is_dirty(const std::unordered_map<std::string, Tag>& db) {
-        if (m_last_state.size() != db.size()) return true;
-        
-        for (const auto& [name, tag] : db) {
-            if (m_last_state.find(name) == m_last_state.end()) return true;
-            
-            const auto& last_val = m_last_state.at(name).value;
-            const auto& new_val = tag.value;
-
-            if (new_val.index() != last_val.index()) return true;
-
-            if (std::holds_alternative<double>(new_val)) {
-                // Implementation #1: Use configured epsilon
-                if (std::abs(std::get<double>(new_val) - std::get<double>(last_val)) > config::DIRTY_FLAG_EPSILON) return true;
-            } else if (tag.value != last_val) {
-                return true;
-            }
-        }
-        return false;
     }
 }

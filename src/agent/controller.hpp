@@ -14,7 +14,7 @@
 
 namespace wspa {
     struct ControlResult {
-        std::map<std::string, double> adjustments;
+        ActuationSet adjustments;
         double stress_score;
         int recommended_interval_ms; // Added for Adaptive Loop (Architecture #3)
     };
@@ -28,17 +28,18 @@ namespace wspa {
         ControlResult evaluate(const TagDatabase& db);
 
     protected:
-        double calculate_stress_score(const std::unordered_map<std::string, Tag>& db);
-        bool is_dirty(const std::unordered_map<std::string, Tag>& db);
+        double calculate_stress_score(const TagSnapshot& db);
         
         // Phase 1: Data Collection Helper
-        void log_snapshot(const std::vector<float>& inputs, double label);
+        void log_snapshot(const std::array<float, 5>& inputs, double label);
 
         // Logic helper for adjustments (Significant #6)
-        std::map<std::string, double> compute_adjustments(const std::unordered_map<std::string, Tag>& snapshot, double stress_score);
+        ActuationSet compute_adjustments(const TagSnapshot& snapshot, double stress_score);
 
-        std::unordered_map<std::string, Tag> m_last_state;
+        TagSnapshot m_last_state;
+        bool m_first_run{true};
         double m_last_stress_score;
+        std::array<float, 5> m_inference_inputs; // Pre-allocated vector for zero-allocation AI inputs
 
 #ifndef WSPA_DISABLE_AI
         std::unique_ptr<InferenceManager> m_inference;

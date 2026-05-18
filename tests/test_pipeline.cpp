@@ -15,11 +15,11 @@ TEST(PipelineTest, FullFlow) {
     Controller controller;
 
     // 1. Simulate Sensor Data
-    db.set("CPU_Utilization", 85.0);
-    db.set("Thread_Queue_Length", 10);
-    db.set("Thermal_Headroom", 75.0);
-    db.set("GPU_Utilization", 20.0);
-    db.set("Disk_Utilization", 5.0);
+    db.set(TagID::CPU_Utilization, 85.0);
+    db.set(TagID::Thread_Queue_Length, 10.0);
+    db.set(TagID::Thermal_Headroom, 75.0);
+    db.set(TagID::GPU_Utilization, 20.0);
+    db.set(TagID::Disk_Utilization, 5.0);
 
     // 2. Run Controller
     auto result = controller.evaluate(db);
@@ -29,9 +29,7 @@ TEST(PipelineTest, FullFlow) {
     EXPECT_FALSE(result.adjustments.empty());
 
     // 3. Apply Actuations
-    for (const auto& [param, value] : result.adjustments) {
-        actuators.queue_adjustment(param, value);
-    }
+    actuators.queue_adjustments(result.adjustments);
     
     // This calls Win32 Power APIs, so we just verify it doesn't crash
     // and returns true (success) if possible.

@@ -2,56 +2,50 @@
 #include "../src/shared/types.hpp"
 #include <thread>
 #include <vector>
-#include <atomic>
 
 using namespace wspa;
 
 TEST(TagDatabaseTest, ConcurrencyStress) {
     TagDatabase db;
-    std::atomic<bool> start{false};
-    const int num_threads = 20;
-    const int iterations = 1000;
+    const int num_threads = 10;
+    const int iterations = 10000;
     
+    auto writer = [&db](double val) {
+        for (int i = 0; i < iterations; ++i) {
+            db.set(TagID::CPU_Utilization, val);
+        }
+    };
+    
+    auto reader = [&db]() {
+        double sum = 0;
+        for (int i = 0; i < iterations; ++i) {
+            sum += db.get(TagID::CPU_Utilization);
+        }
+        // Just ensuring no crash occurs
+        EXPECT_GE(sum, 0); 
+    };
+
     std::vector<std::thread> threads;
-    
-    // Writer threads
-    for (int i = 0; i < num_threads / 2; ++i) {
-        threads.emplace_back([&db, &start, i, iterations]() {
-            while (!start) std::this_thread::yield();
-            for (int j = 0; j < iterations; ++j) {
-                db.set("CPU_Utilization", (double)j);
-                db.set("Foreground_App", std::string("App_") + std::to_string(i));
-            }
-        });
+    for (int i = 0; i < num_threads; ++i) {
+        if (i % 2 == 0) threads.emplace_back(writer, (double)i);
+        else threads.emplace_back(reader);
     }
     
-    // Reader threads
-    for (int i = 0; i < num_threads / 2; ++i) {
-        threads.emplace_back([&db, &start, iterations]() {
-            while (!start) std::this_thread::yield();
-            for (int j = 0; j < iterations; ++j) {
-                auto snapshot = db.get_all();
-                (void)snapshot.size();
-            }
-        });
+    for (auto& t : threads) {
+        t.join();
     }
     
-    start = true;
-    for (auto& t : threads) t.join();
-    
-    EXPECT_TRUE(db.contains("CPU_Utilization"));
-    EXPECT_TRUE(db.contains("Foreground_App"));
+    // Final state should be a valid written value
+    double final_val = db.get(TagID::CPU_Utilization);
+    EXPECT_GE(final_val, 0.0);
 }
 
 TEST(TagDatabaseTest, SnapshotConsistency) {
     TagDatabase db;
-    db.set("A", 1.0);
-    db.set("B", 2);
-    db.set("C", std::string("test"));
+    db.set(TagID::CPU_Utilization, 42.5);
+    db.set(TagID::Thread_Queue_Length, 10.0);
     
-    auto snapshot = db.get_all();
-    EXPECT_EQ(snapshot.size(), 3);
-    EXPECT_EQ(std::get<double>(snapshot["A"].value), 1.0);
-    EXPECT_EQ(std::get<int>(snapshot["B"].value), 2);
-    EXPECT_EQ(std::get<std::string>(snapshot["C"].value), "test");
+    TagSnapshot snapshot = db.get_snapshot();
+    EXPECT_DOUBLE_EQ(snapshot.values[static_cast<size_t>(TagID::CPU_Utilization)], 42.5);
+    EXPECT_DOUBLE_EQ(snapshot.values[static_cast<size_t>(TagID::Thread_Queue_Length)], 10.0);
 }

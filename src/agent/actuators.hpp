@@ -2,7 +2,8 @@
 #include <windows.h>
 #include <powersetting.h>
 #include <string>
-#include <map>
+#include <array>
+#include "../shared/types.hpp"
 
 namespace wspa {
     class ActuatorManager {
@@ -11,7 +12,8 @@ namespace wspa {
         ~ActuatorManager();
 
         // Queues an adjustment for the current cycle
-        void queue_adjustment(const std::string& param, double value);
+        void queue_adjustment(ActuatorID param, double value);
+        void queue_adjustments(const ActuationSet& adjustments);
 
         // Commits all queued adjustments and re-activates the scheme ONCE
         bool commit_changes(double stress_score);
@@ -24,11 +26,11 @@ namespace wspa {
         void refresh_active_scheme();
 protected:
     double calculate_deadband(double stress_score);
-    bool should_apply(const std::string& param, double new_value, double deadband);
+    bool should_apply(ActuatorID param, double new_value, double deadband);
 
     GUID m_active_scheme;
-    std::map<std::string, double> m_last_applied_values;
-    std::map<std::string, double> m_queued_adjustments;
+    ActuationSet m_last_applied_values;
+    ActuationSet m_queued_adjustments;
 
     };
 }

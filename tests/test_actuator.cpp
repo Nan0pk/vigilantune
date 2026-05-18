@@ -26,15 +26,15 @@ TEST(ActuatorTest, AdaptiveFiltering) {
     TestActuator actuator;
     
     // Initial state (manual injection to bypass Win32 dependency)
-    actuator.m_last_applied_values["PerformanceBoost"] = 50.0;
+    actuator.m_last_applied_values.set(ActuatorID::PerformanceBoost, 50.0);
     
     // Small change (3%) - should NOT apply with 5% deadband
-    EXPECT_FALSE(actuator.should_apply("PerformanceBoost", 53.0, 5.0));
+    EXPECT_FALSE(actuator.should_apply(ActuatorID::PerformanceBoost, 53.0, 5.0));
     
     // Large change (6%) - should apply with 5% deadband
-    EXPECT_TRUE(actuator.should_apply("PerformanceBoost", 56.0, 5.0));
+    EXPECT_TRUE(actuator.should_apply(ActuatorID::PerformanceBoost, 56.0, 5.0));
     
     // Switch to High Stress (1% deadband)
     // Small change (1.5%) - should apply now
-    EXPECT_TRUE(actuator.should_apply("PerformanceBoost", 51.5, 1.0));
+    EXPECT_TRUE(actuator.should_apply(ActuatorID::PerformanceBoost, 51.5, 1.0));
 }

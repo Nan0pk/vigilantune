@@ -75,8 +75,16 @@ namespace wspa {
         }
     }
 
-    void ActuatorManager::queue_adjustment(const std::string& param, double value) {
-        m_queued_adjustments[param] = value;
+    void ActuatorManager::queue_adjustment(ActuatorID param, double value) {
+        m_queued_adjustments.set(param, value);
+    }
+
+    void ActuatorManager::queue_adjustments(const ActuationSet& adjustments) {
+        for (size_t i = 0; i < static_cast<size_t>(ActuatorID::MAX_ACTUATORS); ++i) {
+            if (adjustments.has_value[i]) {
+                m_queued_adjustments.set(static_cast<ActuatorID>(i), adjustments.values[i]);
+            }
+        }
     }
 
     bool ActuatorManager::commit_changes(double stress_score) {
@@ -88,18 +96,24 @@ namespace wspa {
         double deadband = calculate_deadband(stress_score);
         bool any_change = false;
 
-        for (const auto& [param, value] : m_queued_adjustments) {
+        for (size_t i = 0; i < static_cast<size_t>(ActuatorID::MAX_ACTUATORS); ++i) {
+            if (!m_queued_adjustments.has_value[i]) continue;
+
+            ActuatorID param = static_cast<ActuatorID>(i);
+            double value = m_queued_adjustments.values[i];
+
             if (should_apply(param, value, deadband)) {
-                std::cout << "[Actuator] Applying " << param << " = " << value 
-                          << " (Deadband: " << deadband << "%)" << std::endl;
-                
                 bool success = false;
                 const GUID* setting_guid = nullptr;
                 
-                if (param == "PerformanceBoost") {
+                if (param == ActuatorID::PerformanceBoost) {
                     setting_guid = &GUID_PROCESSOR_THROTTLE_MAX;
-                } else if (param == "ProcessorFloor") {
+                    std::cout << "[Actuator] Applying PerformanceBoost = " << value 
+                              << " (Deadband: " << deadband << "%)" << std::endl;
+                } else if (param == ActuatorID::ProcessorFloor) {
                     setting_guid = &GUID_PROCESSOR_THROTTLE_MIN;
+                    std::cout << "[Actuator] Applying ProcessorFloor = " << value 
+                              << " (Deadband: " << deadband << "%)" << std::endl;
                 }
 
                 if (setting_guid) {
@@ -108,20 +122,20 @@ namespace wspa {
                     DWORD ac_res = PowerWriteACValueIndex(NULL, &m_active_scheme, &GUID_PROCESSOR_SETTINGS_SUBGROUP, setting_guid, dwValue);
                     DWORD dc_res = PowerWriteDCValueIndex(NULL, &m_active_scheme, &GUID_PROCESSOR_SETTINGS_SUBGROUP, setting_guid, dwValue);
                     
-                    if (ac_res != ERROR_SUCCESS) std::cerr << "[Actuator] AC Write failed for " << param << ". Error: " << ac_res << std::endl;
-                    if (dc_res != ERROR_SUCCESS) std::cerr << "[Actuator] DC Write failed for " << param << ". Error: " << dc_res << std::endl;
+                    if (ac_res != ERROR_SUCCESS) std::cerr << "[Actuator] AC Write failed. Error: " << ac_res << std::endl;
+                    if (dc_res != ERROR_SUCCESS) std::cerr << "[Actuator] DC Write failed. Error: " << dc_res << std::endl;
                     
                     success = (ac_res == ERROR_SUCCESS && dc_res == ERROR_SUCCESS);
                 }
 
                 if (success) {
-                    m_last_applied_values[param] = value;
+                    m_last_applied_values.set(param, value);
                     any_change = true;
                 }
             }
         }
 
-        m_queued_adjustments.clear();
+        m_queued_adjustments.has_value.fill(false); // Reset queue
 
         if (any_change) {
             // Fix for Issue C04: Use the GUID returned from PowerGetActiveScheme 
@@ -148,12 +162,13 @@ namespace wspa {
         return config::DEADBAND_LOW_STRESS;
     }
 
-    bool ActuatorManager::should_apply(const std::string& param, double new_value, double deadband) {
-        if (m_last_applied_values.find(param) == m_last_applied_values.end()) {
+    bool ActuatorManager::should_apply(ActuatorID param, double new_value, double deadband) {
+        size_t idx = static_cast<size_t>(param);
+        if (!m_last_applied_values.has_value[idx]) {
             return true;
         }
 
-        double last_value = m_last_applied_values[param];
+        double last_value = m_last_applied_values.values[idx];
         double diff = std::abs(new_value - last_value);
         
         return diff >= deadband;

@@ -15,6 +15,7 @@ add_executable(wspa_tests
   test_inference.cpp
   test_sensors.cpp
   test_pipeline.cpp
+  test_benchmark.cpp
 )
 
 target_link_libraries(wspa_tests

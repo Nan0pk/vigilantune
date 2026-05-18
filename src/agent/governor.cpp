@@ -1,0 +1,144 @@
+#include "governor.hpp"
+#include <iostream>
+#include <psapi.h>
+#include <tlhelp32.h>
+#include <algorithm>
+
+namespace wspa {
+
+    ProcessGovernor::ProcessGovernor() {
+        discover_topology();
+        
+        // Basic system exclusion list
+        m_exclusion_list = {
+            "explorer.exe", "dwm.exe", "lsass.exe", "services.exe",
+            "csrss.exe", "wininit.exe", "smss.exe", "agent.exe", "watchdog.exe"
+        };
+    }
+
+    ProcessGovernor::~ProcessGovernor() {}
+
+    void ProcessGovernor::discover_topology() {
+        ULONG bufSize = 0;
+        if (!GetSystemCpuSetInformation(nullptr, 0, &bufSize, GetCurrentProcess(), 0) && GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
+            auto buf = std::make_unique<uint8_t[]>(bufSize);
+            if (GetSystemCpuSetInformation((PSYSTEM_CPU_SET_INFORMATION)buf.get(), bufSize, &bufSize, GetCurrentProcess(), 0)) {
+                
+                uint8_t* ptr = buf.get();
+                while (ptr < buf.get() + bufSize) {
+                    PSYSTEM_CPU_SET_INFORMATION info = (PSYSTEM_CPU_SET_INFORMATION)ptr;
+                    if (info->Type == CpuSetInformation) {
+                        // EfficiencyClass: Higher value usually means more performant (P-core)
+                        // This varies by vendor, but 0 is generally "Efficient"
+                        if (info->CpuSet.EfficiencyClass > 0) {
+                            m_topology.p_core_ids.push_back(info->CpuSet.Id);
+                        } else {
+                            m_topology.e_core_ids.push_back(info->CpuSet.Id);
+                        }
+                    }
+                    ptr += info->Size;
+                }
+            }
+        }
+
+        m_topology.is_hybrid = !m_topology.e_core_ids.empty() && !m_topology.p_core_ids.empty();
+        
+        if (m_topology.is_hybrid) {
+            std::cout << "[Governor] Hybrid Topology Detected: " 
+                      << m_topology.p_core_ids.size() << " P-cores, " 
+                      << m_topology.e_core_ids.size() << " E-cores." << std::endl;
+        } else {
+            std::cout << "[Governor] Symmetric Topology Detected (or API unsupported)." << std::endl;
+        }
+    }
+
+    void ProcessGovernor::govern() {
+        HWND foreground_hwnd = GetForegroundWindow();
+        DWORD foreground_pid = 0;
+        GetWindowThreadProcessId(foreground_hwnd, &foreground_pid);
+
+        bool foreground_changed = (foreground_pid != m_last_foreground_pid);
+        m_last_foreground_pid = foreground_pid;
+
+        // In the dedicated thread, every loop iteration is a scan, so we clear the cache
+        m_governed_pids.clear(); 
+
+        HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if (hSnapshot == INVALID_HANDLE_VALUE) return;
+
+        PROCESSENTRY32 pe32;
+        pe32.dwSize = sizeof(PROCESSENTRY32);
+
+        if (Process32First(hSnapshot, &pe32)) {
+            do {
+                if (pe32.th32ProcessID == 0) continue; // Idle process
+
+                if (pe32.th32ProcessID == foreground_pid) {
+                    // Ensure foreground has P-cores if hybrid
+                    if (m_topology.is_hybrid && foreground_changed) {
+                        HANDLE hProcess = OpenProcess(PROCESS_SET_INFORMATION, FALSE, pe32.th32ProcessID);
+                        if (hProcess) {
+                            SetProcessDefaultCpuSets(hProcess, m_topology.p_core_ids.data(), (ULONG)m_topology.p_core_ids.size());
+                            CloseHandle(hProcess);
+                        }
+                    }
+                    continue;
+                }
+
+                // If already governed in this scan window, skip
+                if (m_governed_pids.count(pe32.th32ProcessID)) continue;
+
+                std::string name = pe32.szExeFile;
+                std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+
+                if (m_exclusion_list.count(name)) continue;
+
+                // Identify potential background noise
+                HANDLE hProcess = OpenProcess(PROCESS_SET_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe32.th32ProcessID);
+                if (hProcess) {
+                    apply_limits(hProcess, true);
+                    m_governed_pids.insert(pe32.th32ProcessID);
+                    CloseHandle(hProcess);
+                }
+
+            } while (Process32Next(hSnapshot, &pe32));
+        }
+        CloseHandle(hSnapshot);
+    }
+
+    void ProcessGovernor::apply_limits(HANDLE hProcess, bool is_background) {
+        if (!is_background) return;
+
+        // 1. EcoQoS (Efficiency Mode)
+        PROCESS_POWER_THROTTLING_STATE pts = { 0 };
+        pts.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
+        pts.ControlMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED;
+        pts.StateMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED; 
+        SetProcessInformation(hProcess, ProcessPowerThrottling, &pts, sizeof(pts));
+
+        // 2. Memory Priority (Low)
+        MEMORY_PRIORITY_INFORMATION mpi = { MEMORY_PRIORITY_LOWEST };
+        SetProcessInformation(hProcess, ProcessMemoryPriority, &mpi, sizeof(mpi));
+
+        // 3. CPU Sets (Move to E-cores)
+        if (m_topology.is_hybrid && !m_topology.e_core_ids.empty()) {
+            SetProcessDefaultCpuSets(hProcess, m_topology.e_core_ids.data(), (ULONG)m_topology.e_core_ids.size());
+        }
+        
+        // 4. Background Priority Class
+        SetPriorityClass(hProcess, PROCESS_MODE_BACKGROUND_BEGIN);
+    }
+
+    std::string ProcessGovernor::get_process_name(DWORD pid) {
+        char buffer[MAX_PATH];
+        HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (hProcess) {
+            if (GetModuleBaseNameA(hProcess, NULL, buffer, MAX_PATH)) {
+                CloseHandle(hProcess);
+                return std::string(buffer);
+            }
+            CloseHandle(hProcess);
+        }
+        return "";
+    }
+}

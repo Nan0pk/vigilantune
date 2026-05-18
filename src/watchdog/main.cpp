@@ -54,30 +54,22 @@ int main(int argc, char* argv[]) {
         
         // Security #3: Configurable Safe State
         std::cout << "[Watchdog] Agent CRASHED (Exit Code: " << exitCode << "). Recovery attempt " << recoveryCount << "/" << maxRecoveries << "..." << std::endl;
+        
+        // Immediate Fail-Safe Assertion
         if (PowerSetActiveScheme(NULL, &config::FAILSAFE_SCHEME_GUID) == ERROR_SUCCESS) {
-            std::cout << "[Watchdog] Fail-Safe: Power Scheme reset to configured default." << std::endl;
+            std::cout << "[Watchdog] Fail-Safe: Power Scheme reset to known-safe baseline." << std::endl;
+        } else {
+            std::cerr << "[Watchdog] CRITICAL: Failed to assert fail-safe power scheme!" << std::endl;
         }
 
         if (recoveryCount > maxRecoveries) {
-            std::cerr << "[Watchdog] Max recovery attempts reached. Manual intervention required." << std::endl;
+            std::cerr << "[Watchdog] Max recovery attempts reached. Terminating watchdog to prevent cyclic system instability." << std::endl;
             return 1;
         }
 
-        // Monitoring Loop for Power Scheme Overrides
-        std::cout << "[Watchdog] Starting interference monitoring..." << std::endl;
-        for (int i = 0; i < 5; ++i) { // Simple poll loop before restart
-            GUID* active_guid = nullptr;
-            if (PowerGetActiveScheme(NULL, &active_guid) == ERROR_SUCCESS) {
-                // If the active scheme is not a known safe one, we could force it here
-                // For now, just log the interference
-                LocalFree(active_guid);
-            }
-            Sleep(1000);
-        }
-
-        // Implementation #3: Exponential Backoff (Wait longer after each crash)
+        // Implementation #3: Exponential Backoff
         int wait_seconds = (int)std::pow(2, recoveryCount); 
-        std::cout << "[Watchdog] Waiting " << wait_seconds << " seconds before restart..." << std::endl;
+        std::cout << "[Watchdog] Cooling down for " << wait_seconds << " seconds before restart..." << std::endl;
         Sleep(wait_seconds * 1000);
     }
 
