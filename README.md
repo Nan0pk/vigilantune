@@ -1,4 +1,4 @@
-# 🛡️ Windows SCADA Power Agent (WSPA)
+# 🛡️ WinSCADA Power Agent 
 
 An intelligent, ultra-low-latency background optimization agent designed for Windows. Operating like an industrial Supervisory Control and Data Acquisition (SCADA) system, it dynamically balances system responsiveness and battery longevity by intercepting OS events, evaluating state telemetry via an embedded ONNX machine learning model, and tuning hardware power registers via native Win32 APIs.
 
