@@ -27,34 +27,39 @@ TEST(ControllerTest, SSSCalculation) {
     db["CPU_Utilization"] = { 100.0, std::chrono::system_clock::now() };
     db["Thread_Queue_Length"] = { 50, std::chrono::system_clock::now() };
     db["Thermal_Headroom"] = { 100.0, std::chrono::system_clock::now() };
+    db["GPU_Utilization"] = { 100.0, std::chrono::system_clock::now() };
+    db["Disk_Utilization"] = { 100.0, std::chrono::system_clock::now() };
     
-    // CPU = 100 * 0.35 = 35
-    // Queue = 100 * 0.50 = 50
-    // Thermal = 100 * 0.15 = 15
+    // CPU = 100 * 0.30 = 30
+    // Queue = 100 * 0.40 = 40
+    // Thermal = 100 * 0.10 = 10
+    // GPU = 100 * 0.10 = 10
+    // Disk = 100 * 0.10 = 10
     // Total = 100
     EXPECT_NEAR(controller.calculate_stress_score(db), 100.0, 0.1);
 }
 
 TEST(ControllerTest, DirtyFlagEpsilon) {
     TestController controller;
-    std::unordered_map<std::string, Tag> db;
-    
-    db["CPU_Utilization"] = { 50.0, std::chrono::system_clock::now() };
-    
-    // First run (should be dirty because m_last_state is empty)
-    // Note: evaluate() handles the empty check, so we simulate evaluate behavior or test is_dirty directly
-    
-    // Set last state manually if possible or just use evaluate
     TagDatabase tag_db;
+    
     tag_db.set("CPU_Utilization", 50.0);
     
     auto result = controller.evaluate(tag_db);
+    double initial_sss = result.stress_score;
     
     // Small change (within epsilon 1.0%)
     tag_db.set("CPU_Utilization", 50.5);
     auto result2 = controller.evaluate(tag_db);
     
-    // Stress score should be the same if dirty check worked (it didn't recompute or adjustments remained same)
-    // Actually evaluate() recomputes stress_score every time but compute_adjustments only on dirty.
-    // Let's check result adjustments.
+    // Adjustments should NOT have been recomputed, so they should be empty (since m_last_state was updated but is_dirty was false)
+    // Actually evaluate() only returns result.adjustments if is_dirty is true.
+    EXPECT_TRUE(result2.adjustments.empty());
+    
+    // Large change (outside epsilon 1.0%)
+    tag_db.set("CPU_Utilization", 55.0);
+    auto result3 = controller.evaluate(tag_db);
+    
+    // Adjustments SHOULD be present
+    EXPECT_FALSE(result3.adjustments.empty());
 }

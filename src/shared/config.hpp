@@ -10,10 +10,10 @@ namespace wspa {
         
         // Security: Model Verification (SHA-256)
         // Set this to the hash output of models/train.py
-        inline const std::string EXPECTED_MODEL_HASH = ""; 
+        inline const std::string EXPECTED_MODEL_HASH = "ca00e30d9d8ab99689f1798e39e3d280a8685cf37617c2a9078cfa628dcc9c56"; 
         
         // Mode
-        inline const bool DATA_COLLECTION_MODE = true; 
+        inline const bool DATA_COLLECTION_MODE = false; 
         
         // Intervals (ms)
         inline const int TELEMETRY_INTERVAL_MS = 1000;
@@ -34,8 +34,10 @@ namespace wspa {
         inline const double DEADBAND_LOW_STRESS = 10.0;
         
         // Stress Score weights
-        inline const double SSS_CPU_WEIGHT = 0.35;
-        inline const double SSS_QUEUE_WEIGHT = 0.50;
-        inline const double SSS_THERMAL_WEIGHT = 0.15;
+        inline const double SSS_CPU_WEIGHT = 0.30;
+        inline const double SSS_QUEUE_WEIGHT = 0.40;
+        inline const double SSS_THERMAL_WEIGHT = 0.10;
+        inline const double SSS_GPU_WEIGHT = 0.10;
+        inline const double SSS_DISK_WEIGHT = 0.10;
     }
 }

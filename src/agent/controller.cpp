@@ -82,9 +82,19 @@ namespace wspa {
 #endif
 
         if (!ai_used) {
-            if (stress_score > 70.0) adjustments["PerformanceBoost"] = 100.0;
-            else if (stress_score < 30.0) adjustments["PerformanceBoost"] = 0.0;
-            else adjustments["PerformanceBoost"] = 50.0;
+            // P1 Fix: Improved fallback controller with linear interpolation instead of hardcoded 3-stage thresholds
+            if (stress_score >= 70.0) {
+                adjustments["PerformanceBoost"] = 100.0;
+                adjustments["ProcessorFloor"] = 50.0;
+            } else if (stress_score <= 30.0) {
+                adjustments["PerformanceBoost"] = 0.0;
+                adjustments["ProcessorFloor"] = 0.0;
+            } else {
+                // Linear scale between 30% and 70% stress
+                double ratio = (stress_score - 30.0) / 40.0;
+                adjustments["PerformanceBoost"] = ratio * 100.0;
+                adjustments["ProcessorFloor"] = ratio * 50.0;
+            }
         }
 
         if (config::DATA_COLLECTION_MODE) {
@@ -118,6 +128,8 @@ namespace wspa {
         double cpu = 0.0;
         int queue = 0;
         double thermal = 0.0;
+        double gpu = 0.0;
+        double disk = 0.0;
 
         if (db.count("CPU_Utilization")) {
             const auto& val = db.at("CPU_Utilization").value;
@@ -131,6 +143,14 @@ namespace wspa {
             const auto& val = db.at("Thermal_Headroom").value;
             if (std::holds_alternative<double>(val)) thermal = std::get<double>(val);
         }
+        if (db.count("GPU_Utilization")) {
+            const auto& val = db.at("GPU_Utilization").value;
+            if (std::holds_alternative<double>(val)) gpu = std::get<double>(val);
+        }
+        if (db.count("Disk_Utilization")) {
+            const auto& val = db.at("Disk_Utilization").value;
+            if (std::holds_alternative<double>(val)) disk = std::get<double>(val);
+        }
 
         double queue_norm = std::clamp(std::log1p(queue) / std::log1p(50.0) * 100.0, 0.0, 100.0);
         double thermal_pressure = std::clamp((thermal - 60.0) / 40.0, 0.0, 1.0) * 100.0;
@@ -138,7 +158,9 @@ namespace wspa {
         // Implementation #1: Use configured weights
         double sss = (cpu * config::SSS_CPU_WEIGHT) + 
                      (queue_norm * config::SSS_QUEUE_WEIGHT) + 
-                     (thermal_pressure * config::SSS_THERMAL_WEIGHT);
+                     (thermal_pressure * config::SSS_THERMAL_WEIGHT) +
+                     (gpu * config::SSS_GPU_WEIGHT) +
+                     (disk * config::SSS_DISK_WEIGHT);
         
         return std::clamp(sss, 0.0, 100.0);
     }

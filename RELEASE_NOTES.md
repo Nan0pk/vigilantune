@@ -17,12 +17,23 @@ By running the agent, you help us understand how different CPUs, GPUs, and Therm
 ---
 
 ## ✨ Features in this Preview
-- **Dual-Lane Telemetry**: Event-driven foreground app tracking + coalesced PDH metrics (CPU, GPU, Disk, Queue, Thermal).
+- **Multi-Factor Stress Analysis**: Real-time analysis of CPU, GPU, Disk, and Thermal pressure.
+- **Dual-Lane Telemetry**: Event-driven foreground app tracking + coalesced high-fidelity PDH metrics.
 - **Hardened Tag Database**: Thread-safe, RW-locked central storage for all system state data.
-- **Safety Watchdog**: Zero-overhead process supervisor that resets the system to the "Balanced" power scheme on agent failure.
-- **Adaptive Deadband Actuator**: Intelligently filters power register writes to prevent kernel thrashing.
-- **SHA-256 Verification**: Secure model loading with BCrypt-based checksum validation.
+- **Adaptive Fallback Controller**: Smooth linear power adjustments when AI is disabled.
+- **Safety Watchdog**: Multi-stage recovery with exponential backoff and fail-safe power reset.
+- **SHA-256 Integrity Verification**: Hardened BCrypt-based model validation.
+- **Power Request Protection**: Kernel-level protection for AI inference cadence.
 - **Integrated Training Pipeline**: Complete PyTorch suite for offline model generation.
+
+---
+
+## 🛠️ Recent Stability Fixes (Audit 2026-05-18)
+This release includes critical fixes from our first repository audit:
+- Fixed race conditions in shutdown and use-after-free in event hooks.
+- Hardened model verification and added PDH input sanitization.
+- Improved Windows Power Subsystem persistence logic.
+- Added comprehensive unit and integration testing suite.
 
 ---
 

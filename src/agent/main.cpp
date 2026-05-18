@@ -13,12 +13,27 @@
 #include "sensors.hpp"
 #include "actuators.hpp"
 #include "controller.hpp"
+#include "governor.hpp"
 
 using namespace wspa;
 
 std::atomic<bool> g_running(true);
+std::atomic<bool> g_suspended(false);
+std::atomic<bool> g_battery_saver(false);
 std::mutex g_shutdown_mutex;
 std::condition_variable g_shutdown_cv;
+
+// Anti-Throttling: Opt-out of Windows 11 Efficiency Mode (EcoQoS)
+void DisableEfficiencyMode() {
+    PROCESS_POWER_THROTTLING_STATE powerThrottling = { 0 };
+    powerThrottling.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
+    powerThrottling.ControlMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED;
+    powerThrottling.StateMask = 0; // Turn OFF Power Throttling
+
+    if (!SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling, &powerThrottling, sizeof(powerThrottling))) {
+        // Fallback or log if unsupported (older Win10)
+    }
+}
 
 // Architecture #1: Mutual Monitoring - Check if Watchdog is alive
 bool IsWatchdogRunning() {
@@ -42,20 +57,30 @@ bool IsWatchdogRunning() {
 
 void telemetry_thread(SensorManager& sensors) {
     while (g_running) {
-        sensors.collect_performance_metrics();
+        if (!g_suspended && !g_battery_saver) {
+            sensors.collect_performance_metrics();
+            sensors.collect_high_fidelity_metrics();
+        }
         
         std::unique_lock<std::mutex> lock(g_shutdown_mutex);
         g_shutdown_cv.wait_for(lock, std::chrono::milliseconds(config::TELEMETRY_INTERVAL_MS), [] { return !g_running.load(); });
     }
 }
 
-void control_loop(TagDatabase& db, ActuatorManager& actuators, Controller& controller) {
+void control_loop(TagDatabase& db, ActuatorManager& actuators, Controller& controller, ProcessGovernor& governor) {
     int interval_ms = config::MAX_CONTROL_LOOP_INTERVAL_MS;
     
     while (g_running) {
+        if (g_suspended || g_battery_saver) {
+            std::unique_lock<std::mutex> lock(g_shutdown_mutex);
+            g_shutdown_cv.wait_for(lock, std::chrono::milliseconds(1000), [] { return !g_running.load() || (!g_suspended && !g_battery_saver); });
+            continue;
+        }
+
         auto result = controller.evaluate(db);
         interval_ms = result.recommended_interval_ms;
-
+        
+        // ... (rest of telemetry print logic)
         Tag cpu_tag, queue_tag;
         if (db.get("CPU_Utilization", cpu_tag) && db.get("Thread_Queue_Length", queue_tag)) {
             double cpu = std::get<double>(cpu_tag.value);
@@ -66,11 +91,17 @@ void control_loop(TagDatabase& db, ActuatorManager& actuators, Controller& contr
                       << " | Interval: " << interval_ms << "ms   " << std::flush;
         }
 
+        // Apply Global Actuations
         for (const auto& [param, value] : result.adjustments) {
             actuators.queue_adjustment(param, value);
         }
-        
         actuators.commit_changes(result.stress_score);
+
+        // Apply Process-Level Governance (Surgical Topology Management)
+        HWND foreground_hwnd = GetForegroundWindow();
+        DWORD foreground_pid = 0;
+        GetWindowThreadProcessId(foreground_hwnd, &foreground_pid);
+        governor.govern(foreground_pid);
 
         // Architecture #1: Mutual Monitoring - Alert if watchdog is missing
         static int watchdog_check_counter = 0;
@@ -86,8 +117,39 @@ void control_loop(TagDatabase& db, ActuatorManager& actuators, Controller& contr
     }
 }
 
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    switch (uMsg) {
+    case WM_POWERBROADCAST:
+        if (wParam == PBT_APMSUSPEND) {
+            std::cout << "\n[System] Suspend detected. Pausing agent..." << std::endl;
+            g_suspended = true;
+        }
+        else if (wParam == PBT_APMRESUMEAUTOMATIC) {
+            std::cout << "\n[System] Resume detected. Re-initializing..." << std::endl;
+            g_suspended = false;
+        }
+        else if (wParam == PBT_POWERSETTINGCHANGE) {
+            POWERBROADCAST_SETTING* setting = (POWERBROADCAST_SETTING*)lParam;
+            if (setting->PowerSetting == GUID_POWER_SAVING_STATUS) {
+                DWORD status = *(DWORD*)setting->Data;
+                g_battery_saver = (status != 0);
+                std::cout << "\n[System] Battery Saver: " << (g_battery_saver ? "ON (Yielding)" : "OFF") << std::endl;
+            }
+        }
+        break;
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        return 0;
+    }
+    return DefWindowProc(hwnd, uMsg, wParam, lParam);
+}
+
 int main() {
     std::cout << "--- Windows SCADA Power Agent (WSPA) ---" << std::endl;
+
+    // 1. Initialize Anti-Throttling & Priority
+    DisableEfficiencyMode();
+    SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
 
     static DWORD s_mainThreadId = GetCurrentThreadId();
 
@@ -95,21 +157,33 @@ int main() {
     SensorManager sensors(db);
     ActuatorManager actuators;
     Controller controller;
+    ProcessGovernor governor;
 
     sensors.start();
 
+    // 2. Setup Message Window for Power Events
+    WNDCLASSA wc = { 0 };
+    wc.lpfnWndProc = WindowProc;
+    wc.hInstance = GetModuleHandle(NULL);
+    wc.lpszClassName = "WSPA_MessageWindow";
+    RegisterClassA(&wc);
+    HWND hwnd = CreateWindowExA(0, wc.lpszClassName, NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, NULL, NULL);
+
+    HPOWERNOTIFY hBatteryNotify = RegisterPowerSettingNotification(hwnd, &GUID_POWER_SAVING_STATUS, DEVICE_NOTIFY_WINDOW_HANDLE);
+
     std::thread telemetry(telemetry_thread, std::ref(sensors));
-    std::thread ai(control_loop, std::ref(db), std::ref(actuators), std::ref(controller));
+    std::thread ai(control_loop, std::ref(db), std::ref(actuators), std::ref(controller), std::ref(governor));
 
     SetConsoleCtrlHandler([](DWORD type) -> BOOL {
         if (type == CTRL_C_EVENT || type == CTRL_BREAK_EVENT) {
             std::cout << "\n[Main] Shutdown signal received..." << std::endl;
-            g_running = false;
-            {
-                std::lock_guard<std::mutex> lock(g_shutdown_mutex);
-                g_shutdown_cv.notify_all();
+            if (g_running.exchange(false)) {
+                {
+                    std::lock_guard<std::mutex> lock(g_shutdown_mutex);
+                    g_shutdown_cv.notify_all();
+                }
+                PostThreadMessage(s_mainThreadId, WM_QUIT, 0, 0);
             }
-            PostThreadMessage(s_mainThreadId, WM_QUIT, 0, 0);
             return TRUE;
         }
         return FALSE;
@@ -124,13 +198,15 @@ int main() {
     }
 
     std::cout << "\n[Main] Shutting down..." << std::endl;
-    g_running = false;
-    
-    {
-        std::lock_guard<std::mutex> lock(g_shutdown_mutex);
-        g_shutdown_cv.notify_all();
+    if (g_running.exchange(false)) {
+        {
+            std::lock_guard<std::mutex> lock(g_shutdown_mutex);
+            g_shutdown_cv.notify_all();
+        }
     }
-
+    
+    if (hBatteryNotify) UnregisterPowerSettingNotification(hBatteryNotify);
+    
     if (telemetry.joinable()) telemetry.join();
     if (ai.joinable()) ai.join();
 

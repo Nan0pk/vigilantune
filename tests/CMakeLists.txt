@@ -12,6 +12,9 @@ add_executable(wspa_tests
   test_database.cpp
   test_controller.cpp
   test_actuator.cpp
+  test_inference.cpp
+  test_sensors.cpp
+  test_pipeline.cpp
 )
 
 target_link_libraries(wspa_tests
