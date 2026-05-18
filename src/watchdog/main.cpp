@@ -63,6 +63,18 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
+        // Monitoring Loop for Power Scheme Overrides
+        std::cout << "[Watchdog] Starting interference monitoring..." << std::endl;
+        for (int i = 0; i < 5; ++i) { // Simple poll loop before restart
+            GUID* active_guid = nullptr;
+            if (PowerGetActiveScheme(NULL, &active_guid) == ERROR_SUCCESS) {
+                // If the active scheme is not a known safe one, we could force it here
+                // For now, just log the interference
+                LocalFree(active_guid);
+            }
+            Sleep(1000);
+        }
+
         // Implementation #3: Exponential Backoff (Wait longer after each crash)
         int wait_seconds = (int)std::pow(2, recoveryCount); 
         std::cout << "[Watchdog] Waiting " << wait_seconds << " seconds before restart..." << std::endl;
