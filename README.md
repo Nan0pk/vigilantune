@@ -14,12 +14,12 @@ The architecture is built on elite systems engineering principles: it completely
 
 ```mermaid
 graph TD
-    subgraph Windows Kernel / OS
+    subgraph OS ["Windows Kernel / OS"]
         A[WinEvent Hooks] -->|Foreground Apps| B(Real-Time Tag Database)
         C[High-Fidelity PDH Metrics] -->|CPU/GPU/Thermal/Disk| B
     end
 
-    subgraph Core Agent (agent.exe)
+    subgraph Agent ["Core Agent (agent.exe)"]
         B -->|Atomic Snapshot| D[Stress Controller]
         D -->|Inference Inputs| E[ONNX Inference Engine]
         E -->|Model Evaluation| F[Actuator Pipeline]
@@ -27,15 +27,15 @@ graph TD
         D -->|Heartbeat Ticks| H[Lock-Free Shared Memory IPC]
     end
 
-    subgraph Safety Monitor (watchdog.exe)
+    subgraph Watchdog ["Safety Monitor (watchdog.exe)"]
         H -->|Check Alive every 1s| I[Heartbeat Monitor]
         I -->|Stale? Terminate & Recovery| J[Process Lifecycle Guard]
         J -->|Fail-Safe Trigger| K[Balanced Scheme Reset]
         J -->|Exponential Backoff restart| L[Agent Process Restart]
     end
 
-    G -->|Set Active Scheme / Modify Registers| Windows Kernel / OS
-    K -->|Force Reset Active Scheme| Windows Kernel / OS
+    G -->|Set Active Scheme / Modify Registers| OS
+    K -->|Force Reset Active Scheme| OS
 ```
 
 ### ⚡ Performance Benchmarks
