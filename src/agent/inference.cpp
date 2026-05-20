@@ -1,11 +1,11 @@
 #include "inference.hpp"
-#include <iostream>
 #include <numeric>
 #include <windows.h>
 #include <bcrypt.h>
 #include <iomanip>
 #include <sstream>
 #include "../shared/config.hpp"
+#include "../shared/logger.hpp"
 
 #pragma comment(lib, "bcrypt.lib")
 
@@ -22,12 +22,12 @@ namespace wspa {
         // Gap #7: Initialize Power Request
         REASON_CONTEXT rc = { POWER_REQUEST_CONTEXT_VERSION, POWER_REQUEST_CONTEXT_SIMPLE_STRING };
         rc.Reason.SimpleReasonString = (LPWSTR)L"WinSCADA AI Inference Cadence Protection";
-        m_power_request = PowerCreateRequest(&rc);
+        m_power_request.reset(PowerCreateRequest(&rc));
 
         try {
             // Security #2: Model Integrity Verification (SHA-256)
             if (!verify_model_hash(model_path, config::EXPECTED_MODEL_HASH)) {
-                std::cerr << "[Security] Model verification failed. Load aborted." << std::endl;
+                LOG_ERROR("Inference", "Model verification failed. Load aborted.");
                 return;
             }
 
@@ -50,30 +50,28 @@ namespace wspa {
 
             m_input_node_dims = {1, 5}; 
 
-            std::cout << "[Inference] ONNX Session verified and initialized." << std::endl;
+            LOG_INFO("Inference", "ONNX Session verified and initialized.");
 #else
-            std::cout << "[Inference] AI Disabled in build. Skipping session initialization." << std::endl;
+            LOG_INFO("Inference", "AI Disabled in build. Skipping session initialization.");
 #endif
         } catch (const std::exception& e) {
-            std::cerr << "[Inference] Exception: " << e.what() << std::endl;
+            LOG_ERROR("Inference", "Exception: " << e.what());
         }
     }
 
     InferenceManager::~InferenceManager() {
-        if (m_power_request != INVALID_HANDLE_VALUE) {
-            CloseHandle(m_power_request);
-        }
+        // ScopedHandle handles closure of m_power_request automatically
     }
 
     bool InferenceManager::verify_model_hash(const std::wstring& path, const std::string& expected_hex_hash) {
         if (expected_hex_hash.empty()) {
-            std::cout << "[Security] WARNING: No expected hash provided. Running in insecure mode." << std::endl;
+            LOG_WARN("Inference", "WARNING: No expected hash provided. Running in insecure mode.");
             return true;
         }
 
-        HANDLE hFile = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-        if (hFile == INVALID_HANDLE_VALUE) {
-            std::cerr << "[Security] Failed to open model file for hashing." << std::endl;
+        ScopedHandle hFile(CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL));
+        if (!hFile) {
+            LOG_ERROR("Inference", "Failed to open model file for hashing.");
             return false;
         }
 
@@ -101,7 +99,7 @@ namespace wspa {
 
             BYTE buffer[4096];
             DWORD bytesRead;
-            while (ReadFile(hFile, buffer, sizeof(buffer), &bytesRead, NULL) && bytesRead > 0) {
+            while (ReadFile(hFile.get(), buffer, sizeof(buffer), &bytesRead, NULL) && bytesRead > 0) {
                 status = BCryptHashData(hHash, buffer, bytesRead, 0);
                 if (status != 0) goto cleanup;
             }
@@ -114,22 +112,21 @@ namespace wspa {
             std::string actual_hash = ss.str();
 
             if (actual_hash == expected_hex_hash) {
-                std::cout << "[Security] SHA-256 Verified: " << actual_hash.substr(0, 8) << "..." << std::endl;
+                LOG_INFO("Inference", "SHA-256 Verified: " << actual_hash.substr(0, 8) << "...");
                 success = true;
             } else {
-                std::cerr << "[Security] Hash mismatch!" << std::endl;
-                std::cerr << "  Expected: " << expected_hex_hash << std::endl;
-                std::cerr << "  Actual:   " << actual_hash << std::endl;
+                LOG_ERROR("Inference", "Hash mismatch!");
+                LOG_ERROR("Inference", "  Expected: " << expected_hex_hash);
+                LOG_ERROR("Inference", "  Actual:   " << actual_hash);
             }
         }
 
     cleanup:
         if (hHash) BCryptDestroyHash(hHash);
         if (hAlg) BCryptCloseAlgorithmProvider(hAlg, 0);
-        if (hFile != INVALID_HANDLE_VALUE) CloseHandle(hFile);
 
         if (status != 0 && !success) {
-            std::cerr << "[Security] BCrypt error: 0x" << std::hex << status << std::endl;
+            LOG_ERROR("Inference", "BCrypt error: 0x" << std::hex << status);
         }
 
         return success;
@@ -141,8 +138,8 @@ namespace wspa {
 
         try {
             // Gap #7: Protect Cadence
-            if (m_power_request != INVALID_HANDLE_VALUE) {
-                PowerSetRequest(m_power_request, PowerRequestExecutionRequired);
+            if (m_power_request) {
+                PowerSetRequest(m_power_request.get(), PowerRequestExecutionRequired);
             }
 
             size_t input_tensor_size = input_tensor_values.size();
@@ -160,8 +157,8 @@ namespace wspa {
                 input_names_c.data(), &input_tensor, 1, 
                 output_names_c.data(), output_names_c.size());
 
-            if (m_power_request != INVALID_HANDLE_VALUE) {
-                PowerClearRequest(m_power_request, PowerRequestExecutionRequired);
+            if (m_power_request) {
+                PowerClearRequest(m_power_request.get(), PowerRequestExecutionRequired);
             }
 
             float* floatarr = output_tensors.front().GetTensorMutableData<float>();
@@ -169,10 +166,10 @@ namespace wspa {
 
             return std::vector<float>(floatarr, floatarr + output_size);
         } catch (const Ort::Exception& e) {
-            if (m_power_request != INVALID_HANDLE_VALUE) {
-                PowerClearRequest(m_power_request, PowerRequestExecutionRequired);
+            if (m_power_request) {
+                PowerClearRequest(m_power_request.get(), PowerRequestExecutionRequired);
             }
-            std::cerr << "[Inference] Runtime Error: " << e.what() << std::endl;
+            LOG_ERROR("Inference", "Runtime Error: " << e.what());
             return {};
         }
 #else

@@ -1,6 +1,3 @@
-torch
-pandas
-numpy
-onnx
-onnxruntime
-scikit-learn
+torch>=2.0
+onnx>=1.14
+numpy>=1.24

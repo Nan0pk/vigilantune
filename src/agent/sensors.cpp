@@ -1,10 +1,10 @@
 #include "sensors.hpp"
-#include <iostream>
 #include <vector>
 #include <algorithm>
 #include <powrprof.h>
 #include <pdhmsg.h>
 #include <thread>
+#include "../shared/logger.hpp"
 
 #pragma comment(lib, "pdh.lib")
 #pragma comment(lib, "PowrProf.lib")
@@ -26,59 +26,54 @@ namespace wspa {
         s_instance.store(this);
         
         // 1. Interrupt Lane: Foreground Window Tracking
-        m_hook = SetWinEventHook(
+        m_hook.reset(SetWinEventHook(
             EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
-            NULL, win_event_proc, 0, 0, WINEVENT_OUTOFCONTEXT);
-// ... rest of start code unchanged
+            NULL, win_event_proc, 0, 0, WINEVENT_OUTOFCONTEXT));
 
         // 2. Coalesced Lane: Initialize PDH for performance metrics
-        if (PdhOpenQuery(NULL, 0, &m_query) == ERROR_SUCCESS) {
+        PDH_HQUERY raw_query = nullptr;
+        if (PdhOpenQuery(NULL, 0, &raw_query) == ERROR_SUCCESS) {
+            m_query.reset(raw_query);
             bool any_failed = false;
-            if (PdhAddEnglishCounterA(m_query, "\\Processor(_Total)\\% Processor Time", 0, &m_cpu_counter) != ERROR_SUCCESS) any_failed = true;
-            if (PdhAddEnglishCounterA(m_query, "\\System\\Processor Queue Length", 0, &m_queue_counter) != ERROR_SUCCESS) any_failed = true;
-            if (PdhAddEnglishCounterA(m_query, "\\PhysicalDisk(_Total)\\% Disk Time", 0, &m_disk_counter) != ERROR_SUCCESS) any_failed = true;
+            if (PdhAddEnglishCounterA(m_query.get(), "\\Processor(_Total)\\% Processor Time", 0, &m_cpu_counter) != ERROR_SUCCESS) any_failed = true;
+            if (PdhAddEnglishCounterA(m_query.get(), "\\System\\Processor Queue Length", 0, &m_queue_counter) != ERROR_SUCCESS) any_failed = true;
+            if (PdhAddEnglishCounterA(m_query.get(), "\\PhysicalDisk(_Total)\\% Disk Time", 0, &m_disk_counter) != ERROR_SUCCESS) any_failed = true;
             
             // Thermal and GPU are optional
-            if (PdhAddEnglishCounterA(m_query, "\\Thermal Zone Information(*)\\Temperature", 0, &m_thermal_counter) != ERROR_SUCCESS) {
-                std::cerr << "[Sensors] Thermal counters not found. Thermal telemetry will be disabled." << std::endl;
+            if (PdhAddEnglishCounterA(m_query.get(), "\\Thermal Zone Information(*)\\Temperature", 0, &m_thermal_counter) != ERROR_SUCCESS) {
+                LOG_WARN("Sensors", "Thermal counters not found. Thermal telemetry will be disabled.");
                 m_thermal_counter = nullptr;
             }
 
-            if (PdhAddEnglishCounterA(m_query, "\\GPU Engine(*)\\Utilization Percentage", 0, &m_gpu_counter) != ERROR_SUCCESS) {
-                std::cerr << "[Sensors] GPU Performance counters not found. GPU telemetry will be disabled." << std::endl;
+            if (PdhAddEnglishCounterA(m_query.get(), "\\GPU Engine(*)\\Utilization Percentage", 0, &m_gpu_counter) != ERROR_SUCCESS) {
+                LOG_WARN("Sensors", "GPU Performance counters not found. GPU telemetry will be disabled.");
                 m_gpu_counter = nullptr;
             }
             
             if (any_failed) {
-                 std::cerr << "[Sensors] One or more critical performance counters failed to initialize." << std::endl;
+                 LOG_ERROR("Sensors", "One or more critical performance counters failed to initialize.");
             }
 
-            PdhCollectQueryData(m_query); // Initial collection
+            PdhCollectQueryData(m_query.get()); // Initial collection
         } else {
-            std::cerr << "[Sensors] Failed to open PDH query" << std::endl;
+            LOG_ERROR("Sensors", "Failed to open PDH query");
         }
 
-        std::cout << "[Sensors] Telemetry lanes initialized." << std::endl;
+        LOG_INFO("Sensors", "Telemetry lanes initialized.");
     }
 
     void SensorManager::stop() {
         m_running = false;
         s_instance.store(nullptr);
 
-        if (m_hook) {
-            UnhookWinEvent(m_hook);
-            m_hook = nullptr;
-        }
+        m_hook.reset();
 
         // Wait for any in-flight callbacks to finish
         while (m_active_callbacks > 0) {
             std::this_thread::yield();
         }
 
-        if (m_query) {
-            PdhCloseQuery(m_query);
-            m_query = nullptr;
-        }
+        m_query.reset();
     }
 
     void CALLBACK SensorManager::win_event_proc(
@@ -113,7 +108,7 @@ namespace wspa {
     void SensorManager::collect_performance_metrics() {
         if (!m_query) return;
 
-        if (PdhCollectQueryData(m_query) == ERROR_SUCCESS) {
+        if (PdhCollectQueryData(m_query.get()) == ERROR_SUCCESS) {
             PDH_FMT_COUNTERVALUE cpu_val;
             PDH_FMT_COUNTERVALUE queue_val;
             PDH_FMT_COUNTERVALUE disk_val;

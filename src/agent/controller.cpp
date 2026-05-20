@@ -1,10 +1,10 @@
 #include "controller.hpp"
-#include <iostream>
 #include <variant>
 #include <algorithm>
 #include <cmath>
 #include <unordered_map>
 #include "../shared/config.hpp"
+#include "../shared/logger.hpp"
 
 namespace wspa {
     Controller::Controller() : m_last_stress_score(0.0) {
@@ -53,7 +53,6 @@ namespace wspa {
 
 #ifndef WSPA_DISABLE_AI
         if (m_inference) {
-            // InferenceManager expects vector for now. We will optimize InferenceManager later.
             std::vector<float> in_vec(m_inference_inputs.begin(), m_inference_inputs.end());
             auto outputs = m_inference->run_inference(in_vec);
             if (!outputs.empty()) {
@@ -65,7 +64,6 @@ namespace wspa {
 #endif
 
         if (!ai_used) {
-            // P1 Fix: Improved fallback controller with linear interpolation instead of hardcoded 3-stage thresholds
             if (stress_score >= 70.0) {
                 adjustments.set(ActuatorID::PerformanceBoost, 100.0);
                 adjustments.set(ActuatorID::ProcessorFloor, 50.0);
@@ -73,7 +71,6 @@ namespace wspa {
                 adjustments.set(ActuatorID::PerformanceBoost, 0.0);
                 adjustments.set(ActuatorID::ProcessorFloor, 0.0);
             } else {
-                // Linear scale between 30% and 70% stress
                 double ratio = (stress_score - 30.0) / 40.0;
                 adjustments.set(ActuatorID::PerformanceBoost, ratio * 100.0);
                 adjustments.set(ActuatorID::ProcessorFloor, ratio * 50.0);
@@ -87,24 +84,59 @@ namespace wspa {
         return adjustments;
     }
 
+    static uint64_t get_file_size(const std::string& path) {
+        std::ifstream in(path, std::ifstream::ate | std::ifstream::binary);
+        if (!in.is_open()) return 0;
+        return in.tellg();
+    }
+
     void Controller::log_snapshot(const std::array<float, 5>& inputs, double label) {
-        static bool header_written = false;
-        std::ofstream file(config::TELEMETRY_LOG_PATH, std::ios::app);
-        
+        std::string filepath = config::TELEMETRY_LOG_PATH;
+        uint64_t max_bytes = static_cast<uint64_t>(config::MAX_FILE_SIZE_MB) * 1024 * 1024;
+
+        // Perform log rotation if file size limit exceeded
+        if (get_file_size(filepath) >= max_bytes) {
+            int max_idx = config::MAX_ROTATED_FILES;
+            auto dot = filepath.rfind('.');
+            if (dot != std::string::npos) {
+                std::string oldest = filepath.substr(0, dot) + "_" + std::to_string(max_idx) + filepath.substr(dot);
+                std::remove(oldest.c_str());
+
+                for (int i = max_idx; i >= 1; --i) {
+                    std::string src;
+                    if (i == 1) {
+                        src = filepath;
+                    } else {
+                        src = filepath.substr(0, dot) + "_" + std::to_string(i - 1) + filepath.substr(dot);
+                    }
+                    
+                    std::string dst = filepath.substr(0, dot) + "_" + std::to_string(i) + filepath.substr(dot);
+                    std::rename(src.c_str(), dst.c_str());
+                }
+            }
+            LOG_INFO("Controller", "Telemetry log rotated successfully.");
+        }
+
+        static bool header_checked = false;
+        static bool header_needed = false;
+        if (!header_checked) {
+            uint64_t size = get_file_size(filepath);
+            header_needed = (size == 0);
+            header_checked = true;
+        }
+
+        std::ofstream file(filepath, std::ios::app);
         if (!file.is_open()) return;
 
-        if (!header_written) {
-            file.seekp(0, std::ios::end);
-            if (file.tellp() == 0) {
-                file << "CPU_Utilization,Thread_Queue_Length,Stress_Score,App_Hash,Last_Adjustment,PerformanceBoost_Label\n";
-            }
-            header_written = true;
+        if (header_needed) {
+            file << "CPU_Utilization,Thread_Queue_Length,Stress_Score,App_Hash,Last_Adjustment,PerformanceBoost_Label\n";
+            header_needed = false;
         }
 
         for (size_t i = 0; i < inputs.size(); ++i) {
-            file << inputs[i] << (i == inputs.size() - 1 ? "" : ",");
+            file << inputs[i] << ",";
         }
-        file << "," << label << "\n";
+        file << label << "\n";
     }
 
     double Controller::calculate_stress_score(const TagSnapshot& db) {
@@ -117,7 +149,6 @@ namespace wspa {
         double queue_norm = std::clamp(std::log1p(queue) / std::log1p(50.0) * 100.0, 0.0, 100.0);
         double thermal_pressure = std::clamp((thermal - 60.0) / 40.0, 0.0, 1.0) * 100.0;
         
-        // Implementation #1: Use configured weights
         double sss = (cpu * config::SSS_CPU_WEIGHT) + 
                      (queue_norm * config::SSS_QUEUE_WEIGHT) + 
                      (thermal_pressure * config::SSS_THERMAL_WEIGHT) +

@@ -1,4 +1,3 @@
-#include <iostream>
 #include <windows.h>
 #include <thread>
 #include <chrono>
@@ -8,8 +7,11 @@
 #include <condition_variable>
 #include <mutex>
 #include <tlhelp32.h>
+#include <algorithm>
 #include "../shared/types.hpp"
 #include "../shared/config.hpp"
+#include "../shared/logger.hpp"
+#include "../shared/heartbeat.hpp"
 #include "sensors.hpp"
 #include "actuators.hpp"
 #include "controller.hpp"
@@ -74,13 +76,21 @@ void governor_thread(ProcessGovernor& governor) {
         }
         
         std::unique_lock<std::mutex> lock(g_shutdown_mutex);
-        g_shutdown_cv.wait_for(lock, std::chrono::milliseconds(10000), [] { return !g_running.load(); });
+        g_shutdown_cv.wait_for(lock, std::chrono::milliseconds(config::GOVERNOR_INTERVAL_MS), [] { return !g_running.load(); });
     }
 }
 
 void control_loop(TagDatabase& db, ActuatorManager& actuators, Controller& controller) {
     int interval_ms = config::MAX_CONTROL_LOOP_INTERVAL_MS;
     
+    // Safety #1: Shared Memory Heartbeat IPC Writer
+    wspa::HeartbeatWriter heartbeat;
+    if (heartbeat.valid()) {
+        LOG_INFO("Main", "Shared memory heartbeat writer initialized successfully.");
+    } else {
+        LOG_ERROR("Main", "Failed to initialize shared memory heartbeat writer.");
+    }
+
     while (g_running) {
         if (g_suspended || g_battery_saver) {
             std::unique_lock<std::mutex> lock(g_shutdown_mutex);
@@ -91,23 +101,28 @@ void control_loop(TagDatabase& db, ActuatorManager& actuators, Controller& contr
         auto result = controller.evaluate(db);
         interval_ms = result.recommended_interval_ms;
         
-        // ... (rest of telemetry print logic)
         double cpu = db.get(TagID::CPU_Utilization);
         int queue = (int)db.get(TagID::Thread_Queue_Length);
-        std::cout << "\r[Telemetry] CPU: " << std::fixed << std::setprecision(1) << cpu 
+        
+        LOG_INFO("Telemetry", "CPU: " << std::fixed << std::setprecision(1) << cpu 
                   << "% | Queue: " << queue 
                   << " | SSS: " << std::setprecision(0) << result.stress_score 
-                  << " | Interval: " << interval_ms << "ms   " << std::flush;
+                  << " | Interval: " << interval_ms << "ms");
 
         // Apply Global Actuations
         actuators.queue_adjustments(result.adjustments);
         actuators.commit_changes(result.stress_score);
 
+        // Tick the heartbeat so the watchdog knows we're alive and responsive
+        if (heartbeat.valid()) {
+            heartbeat.tick();
+        }
+
         // Architecture #1: Mutual Monitoring - Alert if watchdog is missing
         static int watchdog_check_counter = 0;
         if (++watchdog_check_counter > 50) { // Check every ~5-10 seconds
             if (!IsWatchdogRunning()) {
-                std::cerr << "\n[Warning] Watchdog process not detected! System safety reduced." << std::endl;
+                LOG_WARN("Main", "Watchdog process not detected! System safety reduced.");
             }
             watchdog_check_counter = 0;
         }
@@ -121,11 +136,11 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     switch (uMsg) {
     case WM_POWERBROADCAST:
         if (wParam == PBT_APMSUSPEND) {
-            std::cout << "\n[System] Suspend detected. Pausing agent..." << std::endl;
+            LOG_INFO("System", "Suspend detected. Pausing agent...");
             g_suspended = true;
         }
         else if (wParam == PBT_APMRESUMEAUTOMATIC) {
-            std::cout << "\n[System] Resume detected. Re-initializing..." << std::endl;
+            LOG_INFO("System", "Resume detected. Re-initializing...");
             g_suspended = false;
         }
         else if (wParam == PBT_POWERSETTINGCHANGE) {
@@ -133,7 +148,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             if (setting->PowerSetting == GUID_POWER_SAVING_STATUS) {
                 DWORD status = *(DWORD*)setting->Data;
                 g_battery_saver = (status != 0);
-                std::cout << "\n[System] Battery Saver: " << (g_battery_saver ? "ON (Yielding)" : "OFF") << std::endl;
+                LOG_INFO("System", "Battery Saver: " << (g_battery_saver ? "ON (Yielding)" : "OFF"));
             }
         }
         break;
@@ -144,12 +159,53 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
-int main() {
-    std::cout << "--- Windows SCADA Power Agent (WSPA) ---" << std::endl;
+std::string get_executable_directory() {
+    char path[MAX_PATH];
+    GetModuleFileNameA(NULL, path, MAX_PATH);
+    std::string exe_path(path);
+    auto pos = exe_path.find_last_of("\\/");
+    if (pos != std::string::npos) {
+        return exe_path.substr(0, pos);
+    }
+    return "";
+}
 
+int main() {
     // 1. Initialize Anti-Throttling & Priority
     DisableEfficiencyMode();
     SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
+
+    // 2. Load Configuration from INI file next to the executable
+    std::string exe_dir = get_executable_directory();
+    std::string config_path = exe_dir.empty() ? "wspa_config.ini" : (exe_dir + "\\wspa_config.ini");
+
+    // Pre-initialize console mirror logging file next to executable
+    std::string log_file_path = exe_dir.empty() ? "wspa_agent.log" : (exe_dir + "\\wspa_agent.log");
+    log::LoggerState::instance().initFile(log_file_path);
+
+    LOG_INFO("Main", "--- Windows SCADA Power Agent (WSPA) ---");
+
+    if (config::load_from_file(config_path)) {
+        LOG_INFO("Main", "Configuration loaded from: " << config_path);
+    } else {
+        LOG_WARN("Main", "Configuration file not found or invalid at: " << config_path << ". Using defaults.");
+    }
+
+    // Dynamic runtime logging level override
+    std::string log_level = "INFO";
+    ConfigLoader loader;
+    if (loader.load(config_path)) {
+        log_level = loader.get_string("general.log_level", "INFO");
+    }
+    log::Level level = log::Level::INFO;
+    std::transform(log_level.begin(), log_level.end(), log_level.begin(), ::toupper);
+    if (log_level == "TRACE") level = log::Level::TRACE;
+    else if (log_level == "DEBUG") level = log::Level::DEBUG;
+    else if (log_level == "INFO") level = log::Level::INFO;
+    else if (log_level == "WARN") level = log::Level::WARN;
+    else if (log_level == "ERROR") level = log::Level::ERROR_LVL;
+    else if (log_level == "FATAL") level = log::Level::FATAL;
+    log::LoggerState::instance().setLevel(level);
 
     static DWORD s_mainThreadId = GetCurrentThreadId();
 
@@ -161,7 +217,7 @@ int main() {
 
     sensors.start();
 
-    // 2. Setup Message Window for Power Events
+    // 3. Setup Message Window for Power Events
     WNDCLASSA wc = { 0 };
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = GetModuleHandle(NULL);
@@ -177,7 +233,7 @@ int main() {
 
     SetConsoleCtrlHandler([](DWORD type) -> BOOL {
         if (type == CTRL_C_EVENT || type == CTRL_BREAK_EVENT) {
-            std::cout << "\n[Main] Shutdown signal received..." << std::endl;
+            LOG_INFO("Main", "Shutdown signal received...");
             if (g_running.exchange(false)) {
                 {
                     std::lock_guard<std::mutex> lock(g_shutdown_mutex);
@@ -190,7 +246,7 @@ int main() {
         return FALSE;
     }, TRUE);
 
-    std::cout << "[Main] System operational. Enter Win32 message loop..." << std::endl;
+    LOG_INFO("Main", "System operational. Enter Win32 message loop...");
 
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
@@ -198,7 +254,7 @@ int main() {
         DispatchMessage(&msg);
     }
 
-    std::cout << "\n[Main] Shutting down..." << std::endl;
+    LOG_INFO("Main", "Shutting down...");
     if (g_running.exchange(false)) {
         {
             std::lock_guard<std::mutex> lock(g_shutdown_mutex);
@@ -213,5 +269,6 @@ int main() {
     if (gov.joinable()) gov.join();
 
     sensors.stop();
+    LOG_INFO("Main", "Graceful shutdown complete.");
     return 0;
 }

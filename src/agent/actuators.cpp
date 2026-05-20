@@ -1,11 +1,12 @@
 #include "actuators.hpp"
-#include <iostream>
 #include <cmath>
 #include <initguid.h>
 #include <algorithm>
 #include <vector>
 #include <powrprof.h>
 #include "../shared/config.hpp"
+#include "../shared/scoped_handle.hpp"
+#include "../shared/logger.hpp"
 
 #pragma comment(lib, "PowrProf.lib")
 
@@ -44,16 +45,16 @@ namespace wspa {
         }
 
         if (!found) {
-            std::cout << "[Actuator] Custom WinSCADA scheme not found. Creating from Balanced base..." << std::endl;
+            LOG_INFO("Actuator", "Custom WinSCADA scheme not found. Creating from Balanced base...");
             GUID* scheme_ptr = nullptr;
             if (PowerDuplicateScheme(NULL, &GUID_TYPICAL_POWER_SAVINGS, &scheme_ptr) == ERROR_SUCCESS) {
-                m_active_scheme = *scheme_ptr;
-                LocalFree(scheme_ptr);
+                ScopedLocalPtr<GUID> guard(scheme_ptr);
+                m_active_scheme = *guard;
                 
                 std::wstring name = L"WinSCADA AI Optimized";
                 PowerWriteFriendlyName(NULL, &m_active_scheme, NULL, NULL, (UCHAR*)name.c_str(), (DWORD)(name.length() * 2 + 2));
             } else {
-                std::cerr << "[Actuator] Failed to duplicate scheme. Falling back to Active." << std::endl;
+                LOG_ERROR("Actuator", "Failed to duplicate scheme. Falling back to Active.");
                 refresh_active_scheme();
             }
         }
@@ -67,11 +68,11 @@ namespace wspa {
     void ActuatorManager::refresh_active_scheme() {
         GUID* active_guid = nullptr;
         DWORD result = PowerGetActiveScheme(NULL, &active_guid);
-        if (result == ERROR_SUCCESS && active_guid) {
-            m_active_scheme = *active_guid;
-            LocalFree(active_guid);
+        ScopedLocalPtr<GUID> guard(active_guid);
+        if (result == ERROR_SUCCESS && guard) {
+            m_active_scheme = *guard;
         } else {
-            std::cerr << "[Actuator] Failed to query active power scheme. Error: " << result << std::endl;
+            LOG_ERROR("Actuator", "Failed to query active power scheme. Error: " << result);
         }
     }
 
@@ -108,12 +109,12 @@ namespace wspa {
                 
                 if (param == ActuatorID::PerformanceBoost) {
                     setting_guid = &GUID_PROCESSOR_THROTTLE_MAX;
-                    std::cout << "[Actuator] Applying PerformanceBoost = " << value 
-                              << " (Deadband: " << deadband << "%)" << std::endl;
+                    LOG_INFO("Actuator", "Applying PerformanceBoost = " << value 
+                              << " (Deadband: " << deadband << "%)");
                 } else if (param == ActuatorID::ProcessorFloor) {
                     setting_guid = &GUID_PROCESSOR_THROTTLE_MIN;
-                    std::cout << "[Actuator] Applying ProcessorFloor = " << value 
-                              << " (Deadband: " << deadband << "%)" << std::endl;
+                    LOG_INFO("Actuator", "Applying ProcessorFloor = " << value 
+                              << " (Deadband: " << deadband << "%)");
                 }
 
                 if (setting_guid) {
@@ -122,8 +123,8 @@ namespace wspa {
                     DWORD ac_res = PowerWriteACValueIndex(NULL, &m_active_scheme, &GUID_PROCESSOR_SETTINGS_SUBGROUP, setting_guid, dwValue);
                     DWORD dc_res = PowerWriteDCValueIndex(NULL, &m_active_scheme, &GUID_PROCESSOR_SETTINGS_SUBGROUP, setting_guid, dwValue);
                     
-                    if (ac_res != ERROR_SUCCESS) std::cerr << "[Actuator] AC Write failed. Error: " << ac_res << std::endl;
-                    if (dc_res != ERROR_SUCCESS) std::cerr << "[Actuator] DC Write failed. Error: " << dc_res << std::endl;
+                    if (ac_res != ERROR_SUCCESS) LOG_ERROR("Actuator", "AC Write failed. Error: " << ac_res);
+                    if (dc_res != ERROR_SUCCESS) LOG_ERROR("Actuator", "DC Write failed. Error: " << dc_res);
                     
                     success = (ac_res == ERROR_SUCCESS && dc_res == ERROR_SUCCESS);
                 }
@@ -142,13 +143,13 @@ namespace wspa {
             // instead of a local copy to ensure the OS correctly processes the re-activation.
             GUID* active_guid = nullptr;
             DWORD res = PowerGetActiveScheme(NULL, &active_guid);
-            if (res == ERROR_SUCCESS && active_guid) {
-                res = PowerSetActiveScheme(NULL, active_guid);
-                LocalFree(active_guid);
+            ScopedLocalPtr<GUID> guard(active_guid);
+            if (res == ERROR_SUCCESS && guard) {
+                res = PowerSetActiveScheme(NULL, guard.get());
             }
 
             if (res != ERROR_SUCCESS) {
-                std::cerr << "[Actuator] Failed to re-activate scheme. Error: " << res << std::endl;
+                LOG_ERROR("Actuator", "Failed to re-activate scheme. Error: " << res);
                 return false;
             }
         }
@@ -177,7 +178,7 @@ namespace wspa {
     bool ActuatorManager::set_active_scheme(const GUID* scheme_guid) {
         DWORD result = PowerSetActiveScheme(NULL, scheme_guid);
         if (result != ERROR_SUCCESS) {
-            std::cerr << "[Actuator] Failed to set active power scheme. Error: " << result << std::endl;
+            LOG_ERROR("Actuator", "Failed to set active power scheme. Error: " << result);
             return false;
         }
         return true;

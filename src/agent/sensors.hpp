@@ -8,6 +8,7 @@
 #include <functional>
 #include <atomic>
 #include "../shared/types.hpp"
+#include "../shared/scoped_handle.hpp"
 
 namespace wspa {
     class SensorManager {
@@ -28,10 +29,10 @@ namespace wspa {
             LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime);
 
         TagDatabase& m_db;
-        HWINEVENTHOOK m_hook;
+        ScopedWinEventHook m_hook;
         
         // PDH members
-        PDH_HQUERY m_query;
+        ScopedPdhQuery m_query;
         PDH_HCOUNTER m_cpu_counter;
         PDH_HCOUNTER m_queue_counter;
         PDH_HCOUNTER m_disk_counter;

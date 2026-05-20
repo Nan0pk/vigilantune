@@ -1,0 +1,36 @@
+name: Build & Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure CMake
+        run: cmake -B build -DWSPA_DISABLE_AI=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  format-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang-format-17
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format-17
+
+      - name: Check formatting
+        run: |
+          find src tests -name '*.cpp' -o -name '*.hpp' | xargs clang-format-17 --dry-run --Werror

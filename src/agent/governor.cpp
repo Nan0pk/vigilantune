@@ -1,19 +1,24 @@
 #include "governor.hpp"
-#include <iostream>
 #include <psapi.h>
 #include <tlhelp32.h>
 #include <algorithm>
+#include "../shared/scoped_handle.hpp"
+#include "../shared/logger.hpp"
+#include "../shared/config.hpp"
 
 namespace wspa {
 
     ProcessGovernor::ProcessGovernor() {
         discover_topology();
         
-        // Basic system exclusion list
-        m_exclusion_list = {
-            "explorer.exe", "dwm.exe", "lsass.exe", "services.exe",
-            "csrss.exe", "wininit.exe", "smss.exe", "agent.exe", "watchdog.exe"
-        };
+        // Load exclusion list from configuration
+        for (const auto& name : config::EXCLUSION_LIST) {
+            std::string lower_name = name;
+            std::transform(lower_name.begin(), lower_name.end(), lower_name.begin(), ::tolower);
+            m_exclusion_list.insert(lower_name);
+        }
+        
+        LOG_INFO("Governor", "Loaded " << m_exclusion_list.size() << " process exclusions from configuration.");
     }
 
     ProcessGovernor::~ProcessGovernor() {}
@@ -44,11 +49,11 @@ namespace wspa {
         m_topology.is_hybrid = !m_topology.e_core_ids.empty() && !m_topology.p_core_ids.empty();
         
         if (m_topology.is_hybrid) {
-            std::cout << "[Governor] Hybrid Topology Detected: " 
+            LOG_INFO("Governor", "Hybrid Topology Detected: " 
                       << m_topology.p_core_ids.size() << " P-cores, " 
-                      << m_topology.e_core_ids.size() << " E-cores." << std::endl;
+                      << m_topology.e_core_ids.size() << " E-cores.");
         } else {
-            std::cout << "[Governor] Symmetric Topology Detected (or API unsupported)." << std::endl;
+            LOG_INFO("Governor", "Symmetric Topology Detected (or API unsupported).");
         }
     }
 
@@ -63,23 +68,22 @@ namespace wspa {
         // In the dedicated thread, every loop iteration is a scan, so we clear the cache
         m_governed_pids.clear(); 
 
-        HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-        if (hSnapshot == INVALID_HANDLE_VALUE) return;
+        ScopedHandle hSnapshot(CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0));
+        if (!hSnapshot) return;
 
         PROCESSENTRY32 pe32;
         pe32.dwSize = sizeof(PROCESSENTRY32);
 
-        if (Process32First(hSnapshot, &pe32)) {
+        if (Process32First(hSnapshot.get(), &pe32)) {
             do {
                 if (pe32.th32ProcessID == 0) continue; // Idle process
 
                 if (pe32.th32ProcessID == foreground_pid) {
                     // Ensure foreground has P-cores if hybrid
                     if (m_topology.is_hybrid && foreground_changed) {
-                        HANDLE hProcess = OpenProcess(PROCESS_SET_INFORMATION, FALSE, pe32.th32ProcessID);
+                        ScopedHandle hProcess(OpenProcess(PROCESS_SET_INFORMATION, FALSE, pe32.th32ProcessID));
                         if (hProcess) {
-                            SetProcessDefaultCpuSets(hProcess, m_topology.p_core_ids.data(), (ULONG)m_topology.p_core_ids.size());
-                            CloseHandle(hProcess);
+                            SetProcessDefaultCpuSets(hProcess.get(), m_topology.p_core_ids.data(), (ULONG)m_topology.p_core_ids.size());
                         }
                     }
                     continue;
@@ -94,16 +98,14 @@ namespace wspa {
                 if (m_exclusion_list.count(name)) continue;
 
                 // Identify potential background noise
-                HANDLE hProcess = OpenProcess(PROCESS_SET_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe32.th32ProcessID);
+                ScopedHandle hProcess(OpenProcess(PROCESS_SET_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pe32.th32ProcessID));
                 if (hProcess) {
-                    apply_limits(hProcess, true);
+                    apply_limits(hProcess.get(), true);
                     m_governed_pids.insert(pe32.th32ProcessID);
-                    CloseHandle(hProcess);
                 }
 
-            } while (Process32Next(hSnapshot, &pe32));
+            } while (Process32Next(hSnapshot.get(), &pe32));
         }
-        CloseHandle(hSnapshot);
     }
 
     void ProcessGovernor::apply_limits(HANDLE hProcess, bool is_background) {
@@ -131,13 +133,11 @@ namespace wspa {
 
     std::string ProcessGovernor::get_process_name(DWORD pid) {
         char buffer[MAX_PATH];
-        HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        ScopedHandle hProcess(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid));
         if (hProcess) {
-            if (GetModuleBaseNameA(hProcess, NULL, buffer, MAX_PATH)) {
-                CloseHandle(hProcess);
+            if (GetModuleBaseNameA(hProcess.get(), NULL, buffer, MAX_PATH)) {
                 return std::string(buffer);
             }
-            CloseHandle(hProcess);
         }
         return "";
     }

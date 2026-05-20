@@ -4,6 +4,7 @@
 #include <memory>
 #include <map>
 #include <windows.h>
+#include "../shared/scoped_handle.hpp"
 
 // Note: Requires ONNX Runtime headers in include path
 #ifndef WSPA_DISABLE_AI
@@ -36,6 +37,6 @@ namespace wspa {
         std::vector<std::string> m_output_node_names_raw;
 
         // Gap #7: Power Request for Inference Cadence
-        HANDLE m_power_request;
+        ScopedHandle m_power_request;
     };
 }
