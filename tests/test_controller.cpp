@@ -3,7 +3,7 @@
 #include "../src/shared/config.hpp"
 #include "../src/shared/types.hpp"
 
-using namespace wspa;
+using namespace nanoloop;
 
 class TestController : public Controller {
 public:

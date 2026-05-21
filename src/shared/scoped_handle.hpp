@@ -5,7 +5,7 @@
 #include <windows.h>
 #include <pdh.h>
 
-namespace wspa {
+namespace nanoloop {
     // Generic RAII wrapper for Win32 HANDLE types
     class ScopedHandle {
     public:
@@ -115,4 +115,4 @@ namespace wspa {
         }
         PDH_HQUERY m_query;
     };
-} // namespace wspa
+} // namespace nanoloop

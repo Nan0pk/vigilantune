@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
-  <assemblyIdentity version="1.0.0.0" processorArchitecture="*" name="WinSCADA.Watchdog" type="win32"/>
-  <description>Windows SCADA Watchdog Service</description>
+  <assemblyIdentity version="0.3.0.0" processorArchitecture="*" name="nanoloop.Watchdog" type="win32"/>
+  <description>nanoloop Watchdog Service</description>
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
     <security>
       <requestedPrivileges>

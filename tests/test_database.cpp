@@ -3,7 +3,7 @@
 #include <thread>
 #include <vector>
 
-using namespace wspa;
+using namespace nanoloop;
 
 TEST(TagDatabaseTest, ConcurrencyStress) {
     TagDatabase db;

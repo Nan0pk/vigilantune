@@ -9,7 +9,7 @@
 #pragma comment(lib, "pdh.lib")
 #pragma comment(lib, "PowrProf.lib")
 
-namespace wspa {
+namespace nanoloop {
     std::atomic<SensorManager*> SensorManager::s_instance = nullptr;
 
     SensorManager::SensorManager(TagDatabase& db) 
@@ -205,4 +205,4 @@ namespace wspa {
             }
         }
     }
-}
+} // namespace nanoloop

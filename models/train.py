@@ -115,7 +115,7 @@ def export_onnx(model, output_path):
     print("-" * 30)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="WinSCADA Model Training Pipeline")
+    parser = argparse.ArgumentParser(description="nanoloop Model Training Pipeline")
     parser.add_argument("--data", type=str, default="models/telemetry_log.csv", help="Path to telemetry log")
     parser.add_argument("--output", type=str, default="models/power_model.onnx", help="Output ONNX path")
     parser.add_argument("--epochs", type=int, default=100)

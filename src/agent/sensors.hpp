@@ -10,7 +10,7 @@
 #include "../shared/types.hpp"
 #include "../shared/scoped_handle.hpp"
 
-namespace wspa {
+namespace nanoloop {
     class SensorManager {
     public:
         SensorManager(TagDatabase& db);
@@ -53,4 +53,4 @@ namespace wspa {
             ULONG  CurrentIdleState;
         };
     };
-}
+} // namespace nanoloop

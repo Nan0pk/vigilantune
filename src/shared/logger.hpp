@@ -22,7 +22,7 @@
 // Re-define ERROR if it was removed, but under a safe alias for user code
 // Windows headers define ERROR as 0; we avoid that symbol entirely in our enum.
 
-namespace wspa::log {
+namespace nanoloop::log {
 
     // ── Log Levels ──────────────────────────────────────────────────────
     enum class Level : int {
@@ -34,9 +34,9 @@ namespace wspa::log {
         FATAL     = 5
     };
 
-    // Compile-time minimum log level (override with -DWSPA_LOG_LEVEL=N)
-#ifndef WSPA_LOG_LEVEL
-#define WSPA_LOG_LEVEL 2  // Default: INFO
+    // Compile-time minimum log level (override with -DNANOLOOP_LOG_LEVEL=N)
+#ifndef NANOLOOP_LOG_LEVEL
+#define NANOLOOP_LOG_LEVEL 2  // Default: INFO
 #endif
 
     // ── Helpers ─────────────────────────────────────────────────────────
@@ -68,7 +68,7 @@ namespace wspa::log {
     struct LoggerState {
         std::mutex              mtx;
         std::unique_ptr<std::ofstream> fileStream;
-        Level                   runtimeLevel = static_cast<Level>(WSPA_LOG_LEVEL);
+        Level                   runtimeLevel = static_cast<Level>(NANOLOOP_LOG_LEVEL);
 
         static LoggerState& instance() {
             static LoggerState s;
@@ -177,52 +177,52 @@ namespace wspa::log {
         return LogStream(lvl, component);
     }
 
-} // namespace wspa::log
+} // namespace nanoloop::log
 
 // ── Public Macros ───────────────────────────────────────────────────────
 // Each macro is compiled away if the level is below the compile-time minimum.
 // Usage:  LOG_INFO("MyComponent", "value = " << 42);
 
-#define WSPA_LOG_IMPL(lvl, comp, msg)                                       \
+#define NANOLOOP_LOG_IMPL(lvl, comp, msg)                                   \
     do {                                                                     \
-        auto& wspa_log_state_ = ::wspa::log::LoggerState::instance();       \
-        if (static_cast<int>(lvl) >= static_cast<int>(wspa_log_state_.runtimeLevel)) { \
-            ::wspa::log::LogStream(lvl, comp) << msg;                       \
+        auto& nanoloop_log_state_ = ::nanoloop::log::LoggerState::instance(); \
+        if (static_cast<int>(lvl) >= static_cast<int>(nanoloop_log_state_.runtimeLevel)) { \
+            ::nanoloop::log::LogStream(lvl, comp) << msg;                   \
         }                                                                    \
     } while (0)
 
-#if WSPA_LOG_LEVEL <= 0
-#define LOG_TRACE(comp, msg) WSPA_LOG_IMPL(::wspa::log::Level::TRACE, comp, msg)
+#if NANOLOOP_LOG_LEVEL <= 0
+#define LOG_TRACE(comp, msg) NANOLOOP_LOG_IMPL(::nanoloop::log::Level::TRACE, comp, msg)
 #else
 #define LOG_TRACE(comp, msg) ((void)0)
 #endif
 
-#if WSPA_LOG_LEVEL <= 1
-#define LOG_DEBUG(comp, msg) WSPA_LOG_IMPL(::wspa::log::Level::DEBUG, comp, msg)
+#if NANOLOOP_LOG_LEVEL <= 1
+#define LOG_DEBUG(comp, msg) NANOLOOP_LOG_IMPL(::nanoloop::log::Level::DEBUG, comp, msg)
 #else
 #define LOG_DEBUG(comp, msg) ((void)0)
 #endif
 
-#if WSPA_LOG_LEVEL <= 2
-#define LOG_INFO(comp, msg)  WSPA_LOG_IMPL(::wspa::log::Level::INFO, comp, msg)
+#if NANOLOOP_LOG_LEVEL <= 2
+#define LOG_INFO(comp, msg)  NANOLOOP_LOG_IMPL(::nanoloop::log::Level::INFO, comp, msg)
 #else
 #define LOG_INFO(comp, msg)  ((void)0)
 #endif
 
-#if WSPA_LOG_LEVEL <= 3
-#define LOG_WARN(comp, msg)  WSPA_LOG_IMPL(::wspa::log::Level::WARN, comp, msg)
+#if NANOLOOP_LOG_LEVEL <= 3
+#define LOG_WARN(comp, msg)  NANOLOOP_LOG_IMPL(::nanoloop::log::Level::WARN, comp, msg)
 #else
 #define LOG_WARN(comp, msg)  ((void)0)
 #endif
 
-#if WSPA_LOG_LEVEL <= 4
-#define LOG_ERROR(comp, msg) WSPA_LOG_IMPL(::wspa::log::Level::ERROR_LVL, comp, msg)
+#if NANOLOOP_LOG_LEVEL <= 4
+#define LOG_ERROR(comp, msg) NANOLOOP_LOG_IMPL(::nanoloop::log::Level::ERROR_LVL, comp, msg)
 #else
 #define LOG_ERROR(comp, msg) ((void)0)
 #endif
 
-#if WSPA_LOG_LEVEL <= 5
-#define LOG_FATAL(comp, msg) WSPA_LOG_IMPL(::wspa::log::Level::FATAL, comp, msg)
+#if NANOLOOP_LOG_LEVEL <= 5
+#define LOG_FATAL(comp, msg) NANOLOOP_LOG_IMPL(::nanoloop::log::Level::FATAL, comp, msg)
 #else
 #define LOG_FATAL(comp, msg) ((void)0)
 #endif

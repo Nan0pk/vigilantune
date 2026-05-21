@@ -9,10 +9,10 @@
 
 #pragma comment(lib, "bcrypt.lib")
 
-namespace wspa {
+namespace nanoloop {
     InferenceManager::InferenceManager(const std::wstring& model_path) 
-#ifndef WSPA_DISABLE_AI
-        : m_env(ORT_LOGGING_LEVEL_WARNING, "WinSCADA"),
+#ifndef NANOLOOP_DISABLE_AI
+        : m_env(ORT_LOGGING_LEVEL_WARNING, "nanoloop"),
           m_memory_info(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)),
 #else
         : 
@@ -21,7 +21,7 @@ namespace wspa {
         
         // Gap #7: Initialize Power Request
         REASON_CONTEXT rc = { POWER_REQUEST_CONTEXT_VERSION, POWER_REQUEST_CONTEXT_SIMPLE_STRING };
-        rc.Reason.SimpleReasonString = (LPWSTR)L"WinSCADA AI Inference Cadence Protection";
+        rc.Reason.SimpleReasonString = (LPWSTR)L"nanoloop AI Inference Cadence Protection";
         m_power_request.reset(PowerCreateRequest(&rc));
 
         try {
@@ -31,7 +31,7 @@ namespace wspa {
                 return;
             }
 
-#ifndef WSPA_DISABLE_AI
+#ifndef NANOLOOP_DISABLE_AI
             Ort::SessionOptions session_options;
             session_options.SetIntraOpNumThreads(1);
             session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
@@ -90,35 +90,33 @@ namespace wspa {
         status = BCryptGetProperty(hAlg, BCRYPT_HASH_LENGTH, (PBYTE)&cbHash, sizeof(DWORD), &cbData, 0);
         if (status != 0) goto cleanup;
 
-        {
-            std::vector<BYTE> hashObject(cbHashObject);
-            std::vector<BYTE> hash(cbHash);
-            
-            status = BCryptCreateHash(hAlg, &hHash, hashObject.data(), cbHashObject, NULL, 0, 0);
+        std::vector<BYTE> hashObject(cbHashObject);
+        std::vector<BYTE> hash(cbHash);
+        
+        status = BCryptCreateHash(hAlg, &hHash, hashObject.data(), cbHashObject, NULL, 0, 0);
+        if (status != 0) goto cleanup;
+
+        BYTE buffer[4096];
+        DWORD bytesRead;
+        while (ReadFile(hFile.get(), buffer, sizeof(buffer), &bytesRead, NULL) && bytesRead > 0) {
+            status = BCryptHashData(hHash, buffer, bytesRead, 0);
             if (status != 0) goto cleanup;
+        }
 
-            BYTE buffer[4096];
-            DWORD bytesRead;
-            while (ReadFile(hFile.get(), buffer, sizeof(buffer), &bytesRead, NULL) && bytesRead > 0) {
-                status = BCryptHashData(hHash, buffer, bytesRead, 0);
-                if (status != 0) goto cleanup;
-            }
+        status = BCryptFinishHash(hHash, hash.data(), cbHash, 0);
+        if (status != 0) goto cleanup;
 
-            status = BCryptFinishHash(hHash, hash.data(), cbHash, 0);
-            if (status != 0) goto cleanup;
+        std::stringstream ss;
+        for (BYTE b : hash) ss << std::hex << std::setw(2) << std::setfill('0') << (int)b;
+        std::string actual_hash = ss.str();
 
-            std::stringstream ss;
-            for (BYTE b : hash) ss << std::hex << std::setw(2) << std::setfill('0') << (int)b;
-            std::string actual_hash = ss.str();
-
-            if (actual_hash == expected_hex_hash) {
-                LOG_INFO("Inference", "SHA-256 Verified: " << actual_hash.substr(0, 8) << "...");
-                success = true;
-            } else {
-                LOG_ERROR("Inference", "Hash mismatch!");
-                LOG_ERROR("Inference", "  Expected: " << expected_hex_hash);
-                LOG_ERROR("Inference", "  Actual:   " << actual_hash);
-            }
+        if (actual_hash == expected_hex_hash) {
+            LOG_INFO("Inference", "SHA-256 Verified: " << actual_hash.substr(0, 8) << "...");
+            success = true;
+        } else {
+            LOG_ERROR("Inference", "Hash mismatch!");
+            LOG_ERROR("Inference", "  Expected: " << expected_hex_hash);
+            LOG_ERROR("Inference", "  Actual:   " << actual_hash);
         }
 
     cleanup:
@@ -133,7 +131,7 @@ namespace wspa {
     }
 
     std::vector<float> InferenceManager::run_inference(std::vector<float> input_tensor_values) {
-#ifndef WSPA_DISABLE_AI
+#ifndef NANOLOOP_DISABLE_AI
         if (!m_session) return {};
 
         try {
@@ -176,4 +174,4 @@ namespace wspa {
         return {};
 #endif
     }
-}
+} // namespace nanoloop

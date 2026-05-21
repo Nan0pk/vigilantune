@@ -1,4 +1,4 @@
-# WinSCADA Load Simulation Script
+# nanoloop Load Simulation Script
 # Purpose: Empirically validate agent response to CPU and Thread backlog spikes
 
 param (
@@ -6,7 +6,7 @@ param (
     [int]$SpikeIntensity = 10 # Number of concurrent worker threads
 )
 
-Write-Host "--- WinSCADA Load Simulator ---" -ForegroundColor Cyan
+Write-Host "--- nanoloop Load Simulator ---" -ForegroundColor Cyan
 Write-Host "Target: Spiking CPU and Thread Queue for $DurationSeconds seconds..."
 
 $stopTime = (Get-Date).AddSeconds($DurationSeconds)
@@ -22,7 +22,7 @@ $jobs = for ($i = 0; $i -lt $SpikeIntensity; $i++) {
     }
 }
 
-Write-Host "Load active. Monitor the WinSCADA Agent log for SSS spikes." -ForegroundColor Yellow
+Write-Host "Load active. Monitor the nanoloop Agent log for SSS spikes." -ForegroundColor Yellow
 
 while ((Get-Date) -lt $stopTime) {
     $timeLeft = ($stopTime - (Get-Date)).Seconds

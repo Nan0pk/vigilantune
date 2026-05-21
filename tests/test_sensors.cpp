@@ -2,7 +2,7 @@
 #include "../src/agent/sensors.hpp"
 #include "../shared/types.hpp"
 
-using namespace wspa;
+using namespace nanoloop;
 
 TEST(SensorTest, Lifecycle) {
     TagDatabase db;

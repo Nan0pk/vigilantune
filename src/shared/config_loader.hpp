@@ -7,7 +7,7 @@
 #include <vector>
 #include <functional>
 
-namespace wspa {
+namespace nanoloop {
 
     // Lightweight INI file parser — header-only, zero external dependencies.
     // Supports sections, key=value pairs, and comments (';' and '#').
@@ -125,4 +125,4 @@ namespace wspa {
         bool m_loaded = false;
     };
 
-} // namespace wspa
+} // namespace nanoloop

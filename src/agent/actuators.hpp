@@ -5,7 +5,7 @@
 #include <array>
 #include "../shared/types.hpp"
 
-namespace wspa {
+namespace nanoloop {
     class ActuatorManager {
     public:
         ActuatorManager();

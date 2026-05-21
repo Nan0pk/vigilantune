@@ -17,13 +17,13 @@ DEFINE_GUID(GUID_PROCESSOR_THROTTLE_MAX, 0xbcbb0383, 0x0504, 0x42db, 0x9a, 0x3c,
 // Minimum Processor State
 DEFINE_GUID(GUID_PROCESSOR_THROTTLE_MIN, 0x893dee03, 0x5242, 0x4642, 0xbe, 0x5d, 0x0a, 0x7c, 0x4a, 0xf6, 0x43, 0xd4);
 
-// WinSCADA Custom Scheme GUID
+// Nanoloop Custom Scheme GUID
 // {7FBDC34D-3932-414F-8E34-4C5E095A6E4B}
-DEFINE_GUID(GUID_WINSCADA_SCHEME, 0x7fbdc34d, 0x3932, 0x414f, 0x8e, 0x34, 0x4c, 0x5e, 0x09, 0x5a, 0x6e, 0x4b);
+DEFINE_GUID(GUID_NANOLOOP_SCHEME, 0x7fbdc34d, 0x3932, 0x414f, 0x8e, 0x34, 0x4c, 0x5e, 0x09, 0x5a, 0x6e, 0x4b);
 
-namespace wspa {
+namespace nanoloop {
     ActuatorManager::ActuatorManager() {
-        // Architecture #4: Create or find custom WinSCADA scheme by name
+        // Architecture #4: Create or find custom Nanoloop scheme by name
         bool found = false;
         GUID scheme_guid = { 0 };
         DWORD buffer_size = sizeof(GUID);
@@ -34,7 +34,7 @@ namespace wspa {
                 std::vector<UCHAR> buffer(name_size);
                 if (PowerReadFriendlyName(NULL, &scheme_guid, NULL, NULL, buffer.data(), &name_size) == ERROR_SUCCESS) {
                     std::wstring name((wchar_t*)buffer.data());
-                    if (name == L"WinSCADA AI Optimized") {
+                    if (name == L"Nanoloop AI Optimized") {
                         m_active_scheme = scheme_guid;
                         found = true;
                         break;
@@ -45,13 +45,13 @@ namespace wspa {
         }
 
         if (!found) {
-            LOG_INFO("Actuator", "Custom WinSCADA scheme not found. Creating from Balanced base...");
+            LOG_INFO("Actuator", "Custom Nanoloop scheme not found. Creating from Balanced base...");
             GUID* scheme_ptr = nullptr;
             if (PowerDuplicateScheme(NULL, &GUID_TYPICAL_POWER_SAVINGS, &scheme_ptr) == ERROR_SUCCESS) {
                 ScopedLocalPtr<GUID> guard(scheme_ptr);
                 m_active_scheme = *guard;
                 
-                std::wstring name = L"WinSCADA AI Optimized";
+                std::wstring name = L"Nanoloop AI Optimized";
                 PowerWriteFriendlyName(NULL, &m_active_scheme, NULL, NULL, (UCHAR*)name.c_str(), (DWORD)(name.length() * 2 + 2));
             } else {
                 LOG_ERROR("Actuator", "Failed to duplicate scheme. Falling back to Active.");
@@ -193,4 +193,4 @@ namespace wspa {
         }
         return set_active_scheme(&m_active_scheme);
     }
-}
+} // namespace nanoloop

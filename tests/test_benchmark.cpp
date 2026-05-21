@@ -4,7 +4,7 @@
 #include <chrono>
 #include <iostream>
 
-using namespace wspa;
+using namespace nanoloop;
 
 TEST(BenchmarkTest, TagDatabaseLatency) {
     TagDatabase db;

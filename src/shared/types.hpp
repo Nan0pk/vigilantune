@@ -4,7 +4,7 @@
 #include <atomic>
 #include <chrono>
 
-namespace wspa {
+namespace nanoloop {
     enum class TagID : size_t {
         CPU_Utilization = 0,
         Thread_Queue_Length,

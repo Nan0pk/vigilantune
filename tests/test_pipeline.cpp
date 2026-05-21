@@ -6,7 +6,7 @@
 #include <thread>
 #include <chrono>
 
-using namespace wspa;
+using namespace nanoloop;
 
 TEST(PipelineTest, FullFlow) {
     TagDatabase db;

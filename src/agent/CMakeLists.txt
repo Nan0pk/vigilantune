@@ -28,7 +28,7 @@ target_link_libraries(agent_core PRIVATE User32.lib PowrProf.lib Pdh.lib bcrypt.
 
 if(NOT HAS_ONNX)
     message(WARNING "ONNX Runtime not found. AI Inference will be disabled in the build.")
-    target_compile_definitions(agent_core PUBLIC WSPA_DISABLE_AI)
+    target_compile_definitions(agent_core PUBLIC NANOLOOP_DISABLE_AI)
 else()
     if(onnxruntime_FOUND)
         target_link_libraries(agent_core PUBLIC onnxruntime)

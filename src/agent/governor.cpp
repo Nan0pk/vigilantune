@@ -6,7 +6,7 @@
 #include "../shared/logger.hpp"
 #include "../shared/config.hpp"
 
-namespace wspa {
+namespace nanoloop {
 
     ProcessGovernor::ProcessGovernor() {
         discover_topology();
@@ -79,11 +79,29 @@ namespace wspa {
                 if (pe32.th32ProcessID == 0) continue; // Idle process
 
                 if (pe32.th32ProcessID == foreground_pid) {
-                    // Ensure foreground has P-cores if hybrid
-                    if (m_topology.is_hybrid && foreground_changed) {
+                    if (foreground_changed) {
                         ScopedHandle hProcess(OpenProcess(PROCESS_SET_INFORMATION, FALSE, pe32.th32ProcessID));
                         if (hProcess) {
-                            SetProcessDefaultCpuSets(hProcess.get(), m_topology.p_core_ids.data(), (ULONG)m_topology.p_core_ids.size());
+                            // 1. Ensure foreground has P-cores if hybrid
+                            if (m_topology.is_hybrid) {
+                                SetProcessDefaultCpuSets(hProcess.get(), m_topology.p_core_ids.data(), (ULONG)m_topology.p_core_ids.size());
+                            }
+
+                            // 2. Disable EcoQoS (Turn OFF Efficiency Mode)
+                            PROCESS_POWER_THROTTLING_STATE pts = { 0 };
+                            pts.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
+                            pts.ControlMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED;
+                            pts.StateMask = 0; // Turn OFF execution speed throttling
+                            SetProcessInformation(hProcess.get(), ProcessPowerThrottling, &pts, sizeof(pts));
+
+                            // 3. Restore Memory Priority (Normal)
+                            MEMORY_PRIORITY_INFORMATION mpi = { MEMORY_PRIORITY_NORMAL };
+                            SetProcessInformation(hProcess.get(), ProcessMemoryPriority, &mpi, sizeof(mpi));
+
+                            // 4. Restore Priority Class (Normal)
+                            SetPriorityClass(hProcess.get(), NORMAL_PRIORITY_CLASS);
+
+                            LOG_DEBUG("Governor", "Restored foreground application performance (PID: " << pe32.th32ProcessID << ").");
                         }
                     }
                     continue;
@@ -128,7 +146,9 @@ namespace wspa {
         }
         
         // 4. Background Priority Class
-        SetPriorityClass(hProcess, PROCESS_MODE_BACKGROUND_BEGIN);
+        // Note: PROCESS_MODE_BACKGROUND_BEGIN is only supported on the current process (GetCurrentProcess()).
+        // For external processes, we use IDLE_PRIORITY_CLASS.
+        SetPriorityClass(hProcess, IDLE_PRIORITY_CLASS);
     }
 
     std::string ProcessGovernor::get_process_name(DWORD pid) {
@@ -141,4 +161,4 @@ namespace wspa {
         }
         return "";
     }
-}
+} // namespace nanoloop

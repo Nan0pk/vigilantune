@@ -7,7 +7,7 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-add_executable(wspa_tests
+add_executable(nanoloop_tests
   main.cpp
   test_database.cpp
   test_controller.cpp
@@ -18,11 +18,11 @@ add_executable(wspa_tests
   test_benchmark.cpp
 )
 
-target_link_libraries(wspa_tests
+target_link_libraries(nanoloop_tests
   PRIVATE
     GTest::gtest_main
     agent_core
 )
 
 include(GoogleTest)
-gtest_discover_tests(wspa_tests)
+gtest_discover_tests(nanoloop_tests)

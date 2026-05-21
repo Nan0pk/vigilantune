@@ -2,7 +2,7 @@
 #include "../src/agent/actuators.hpp"
 #include <iostream>
 
-using namespace wspa;
+using namespace nanoloop;
 
 class TestActuator : public ActuatorManager {
 public:

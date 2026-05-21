@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <string>
 
-namespace wspa {
+namespace nanoloop {
 
     // Shared memory layout for Agent <-> Watchdog heartbeat IPC.
     // The agent writes a monotonically increasing tick counter every control loop.
@@ -24,7 +24,7 @@ namespace wspa {
         HeartbeatWriter() : m_mapping(NULL), m_data(nullptr) {
             m_mapping = CreateFileMappingA(
                 INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE,
-                0, sizeof(HeartbeatData), "Local\\WinSCADA_Heartbeat");
+                0, sizeof(HeartbeatData), "Local\\Nanoloop_Heartbeat");
             
             if (m_mapping) {
                 m_data = (HeartbeatData*)MapViewOfFile(
@@ -65,7 +65,7 @@ namespace wspa {
     class HeartbeatReader {
     public:
         HeartbeatReader() : m_mapping(NULL), m_data(nullptr) {
-            m_mapping = OpenFileMappingA(FILE_MAP_READ, FALSE, "Local\\WinSCADA_Heartbeat");
+            m_mapping = OpenFileMappingA(FILE_MAP_READ, FALSE, "Local\\Nanoloop_Heartbeat");
             if (m_mapping) {
                 m_data = (HeartbeatData*)MapViewOfFile(
                     m_mapping, FILE_MAP_READ, 0, 0, sizeof(HeartbeatData));
@@ -108,4 +108,4 @@ namespace wspa {
         HeartbeatData* m_data;
     };
 
-} // namespace wspa
+} // namespace nanoloop

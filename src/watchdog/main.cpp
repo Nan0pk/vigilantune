@@ -13,7 +13,7 @@
 
 #pragma comment(lib, "PowrProf.lib")
 
-using namespace wspa;
+using namespace nanoloop;
 
 bool StartAgent(const std::string& path, PROCESS_INFORMATION& pi) {
     STARTUPINFOA si = { sizeof(si) };
@@ -49,18 +49,34 @@ void monitor_heartbeat(HANDLE hProcess, DWORD pid, std::atomic<bool>& active) {
 
     LOG_INFO("Watchdog", "Heartbeat monitoring started for Agent PID " << pid);
     
+    ULONGLONG last_tick = GetTickCount64();
+    ULONGLONG cooldown_until = 0;
+
     while (active) {
+        ULONGLONG current_tick = GetTickCount64();
+        ULONGLONG elapsed = (current_tick >= last_tick) ? (current_tick - last_tick) : 0;
+        last_tick = current_tick;
+
+        if (elapsed > 3000) {
+            LOG_WARN("Watchdog", "Significant loop delay detected (" << elapsed << " ms). Assuming system resume from sleep/suspend. Triggering 2-second cooldown.");
+            cooldown_until = current_tick + 2000;
+        }
+
         // Check if process has already exited
         DWORD exitCode = 0;
         if (GetExitCodeProcess(hProcess, &exitCode) && exitCode != STILL_ACTIVE) {
             break;
         }
 
-        // Verify if agent's heartbeat is alive (timeout of 5 seconds)
-        if (!reader.is_alive(5000)) {
-            LOG_ERROR("Watchdog", "Agent HANG detected (Heartbeat stale)! Terminating agent process...");
-            TerminateProcess(hProcess, 0xDEAD); // Force crash exit code
-            break;
+        if (current_tick >= cooldown_until) {
+            // Verify if agent's heartbeat is alive (timeout of 5 seconds)
+            if (!reader.is_alive(5000)) {
+                LOG_ERROR("Watchdog", "Agent HANG detected (Heartbeat stale)! Terminating agent process...");
+                TerminateProcess(hProcess, 0xDEAD); // Force crash exit code
+                break;
+            }
+        } else {
+            LOG_INFO("Watchdog", "Skipping heartbeat check during active sleep/suspend cooldown period.");
         }
 
         Sleep(1000);
@@ -71,10 +87,10 @@ void monitor_heartbeat(HANDLE hProcess, DWORD pid, std::atomic<bool>& active) {
 int main(int argc, char* argv[]) {
     // Setup mirror file logging next to watchdog executable
     std::string exe_dir = get_executable_directory();
-    std::string log_file_path = exe_dir.empty() ? "wspa_watchdog.log" : (exe_dir + "\\wspa_watchdog.log");
+    std::string log_file_path = exe_dir.empty() ? "nanoloop_watchdog.log" : (exe_dir + "\\nanoloop_watchdog.log");
     log::LoggerState::instance().initFile(log_file_path);
 
-    LOG_INFO("Watchdog", "--- Windows SCADA Watchdog Monitor ---");
+    LOG_INFO("Watchdog", "--- nanoloop Watchdog Monitor ---");
 
     if (argc < 2) {
         LOG_FATAL("Watchdog", "Usage: watchdog.exe <AGENT_EXE_PATH>");
@@ -84,7 +100,7 @@ int main(int argc, char* argv[]) {
     std::string agentPath = argv[1];
 
     // Load configuration to get max recoveries
-    std::string config_path = exe_dir.empty() ? "wspa_config.ini" : (exe_dir + "\\wspa_config.ini");
+    std::string config_path = exe_dir.empty() ? "nanoloop_config.ini" : (exe_dir + "\\nanoloop_config.ini");
     config::load_from_file(config_path);
 
     int recoveryCount = 0;

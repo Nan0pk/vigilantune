@@ -6,9 +6,9 @@
 #include "../shared/config.hpp"
 #include "../shared/logger.hpp"
 
-namespace wspa {
+namespace nanoloop {
     Controller::Controller() : m_last_stress_score(0.0) {
-#ifndef WSPA_DISABLE_AI
+#ifndef NANOLOOP_DISABLE_AI
         m_inference = std::make_unique<InferenceManager>(config::MODEL_PATH);
 #endif
     }
@@ -51,7 +51,7 @@ namespace wspa {
 
         bool ai_used = false;
 
-#ifndef WSPA_DISABLE_AI
+#ifndef NANOLOOP_DISABLE_AI
         if (m_inference) {
             std::vector<float> in_vec(m_inference_inputs.begin(), m_inference_inputs.end());
             auto outputs = m_inference->run_inference(in_vec);
@@ -157,4 +157,4 @@ namespace wspa {
         
         return std::clamp(sss, 0.0, 100.0);
     }
-}
+} // namespace nanoloop

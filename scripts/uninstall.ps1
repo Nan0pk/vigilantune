@@ -1,16 +1,16 @@
-# WinSCADA Power Agent — Uninstall Script
-# Purpose: Cleanly removes the WinSCADA AI Optimized power scheme,
+# nanoloop Power Agent — Uninstall Script
+# Purpose: Cleanly removes both old WinSCADA and new Nanoloop AI Optimized power schemes,
 #          stops running agent/watchdog processes, and deletes telemetry logs.
 # Usage:   Run from an elevated (Administrator) PowerShell prompt.
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$SchemeName = "WinSCADA AI Optimized"
+$SchemeNames = @("WinSCADA AI Optimized", "Nanoloop AI Optimized")
 $BalancedGuid = "381b4222-f694-41f0-9685-ff5bb260df2e"
 
-# --- Step 1: Stop WinSCADA processes ---
-Write-Host "[1/4] Stopping WinSCADA processes..." -ForegroundColor Cyan
+# --- Step 1: Stop agent/watchdog processes ---
+Write-Host "[1/4] Stopping agent and watchdog processes..." -ForegroundColor Cyan
 
 foreach ($procName in @("agent", "watchdog")) {
     $procs = Get-Process -Name $procName -ErrorAction SilentlyContinue
@@ -22,7 +22,7 @@ foreach ($procName in @("agent", "watchdog")) {
     }
 }
 
-# --- Step 2: Identify the WinSCADA power scheme ---
+# --- Step 2: Identify the power schemes to delete ---
 Write-Host "[2/4] Enumerating power schemes..." -ForegroundColor Cyan
 
 $activeSchemeOutput = powercfg /getactivescheme 2>&1
@@ -32,40 +32,50 @@ if ($activeSchemeOutput -match "([0-9a-fA-F\-]{36})") {
     Write-Host "      Active scheme GUID: $activeGuid" -ForegroundColor DarkGray
 }
 
-$winscadaGuid = $null
+$guidsToDelete = @()
 $schemeList = powercfg /list 2>&1
 foreach ($line in $schemeList) {
-    if ($line -match "([0-9a-fA-F\-]{36})" -and $line -like "*$SchemeName*") {
-        $winscadaGuid = $Matches[1]
-        break
+    if ($line -match "([0-9a-fA-F\-]{36})") {
+        $guid = $Matches[1]
+        foreach ($name in $SchemeNames) {
+            if ($line -like "*$name*") {
+                $guidsToDelete += [PSCustomObject]@{
+                    Guid = $guid
+                    Name = $name
+                }
+            }
+        }
     }
 }
 
-# --- Step 3: Switch away and delete the WinSCADA scheme ---
-Write-Host "[3/4] Removing WinSCADA power scheme..." -ForegroundColor Cyan
+# --- Step 3: Switch away and delete the power schemes ---
+Write-Host "[3/4] Removing power schemes..." -ForegroundColor Cyan
 
-if ($winscadaGuid) {
-    # If the WinSCADA scheme is currently active, switch to Balanced first
-    if ($activeGuid -and $activeGuid -eq $winscadaGuid) {
-        Write-Host "      WinSCADA scheme is active — switching to Balanced first..." -ForegroundColor Yellow
+if ($guidsToDelete.Count -gt 0) {
+    foreach ($scheme in $guidsToDelete) {
+        # If the scheme to delete is currently active, switch to Balanced first
+        if ($activeGuid -and $activeGuid -eq $scheme.Guid) {
+            Write-Host "      Active scheme '$($scheme.Name)' is active — switching to Balanced first..." -ForegroundColor Yellow
+            try {
+                powercfg /setactive $BalancedGuid
+                $activeGuid = $BalancedGuid
+                Write-Host "      Switched active scheme to Balanced ($BalancedGuid)." -ForegroundColor Green
+            } catch {
+                Write-Host "      ERROR: Failed to switch to Balanced scheme: $_" -ForegroundColor Red
+                exit 1
+            }
+        }
+
         try {
-            powercfg /setactive $BalancedGuid
-            Write-Host "      Switched active scheme to Balanced ($BalancedGuid)." -ForegroundColor Green
+            powercfg /delete $($scheme.Guid)
+            Write-Host "      Deleted power scheme '$($scheme.Name)' ($($scheme.Guid))." -ForegroundColor Green
         } catch {
-            Write-Host "      ERROR: Failed to switch to Balanced scheme: $_" -ForegroundColor Red
+            Write-Host "      ERROR: Failed to delete power scheme: $_" -ForegroundColor Red
             exit 1
         }
     }
-
-    try {
-        powercfg /delete $winscadaGuid
-        Write-Host "      Deleted power scheme '$SchemeName' ($winscadaGuid)." -ForegroundColor Green
-    } catch {
-        Write-Host "      ERROR: Failed to delete power scheme: $_" -ForegroundColor Red
-        exit 1
-    }
 } else {
-    Write-Host "      '$SchemeName' power scheme not found — nothing to delete." -ForegroundColor DarkGray
+    Write-Host "      No nanoloop/WinSCADA power schemes found — nothing to delete." -ForegroundColor DarkGray
 }
 
 # --- Step 4: Remove telemetry logs ---
@@ -86,4 +96,4 @@ if ($logs) {
 }
 
 Write-Host ""
-Write-Host "WinSCADA Power Agent uninstall complete." -ForegroundColor Green
+Write-Host "nanoloop Power Agent uninstall complete." -ForegroundColor Green

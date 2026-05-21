@@ -7,11 +7,11 @@
 #include "../shared/scoped_handle.hpp"
 
 // Note: Requires ONNX Runtime headers in include path
-#ifndef WSPA_DISABLE_AI
+#ifndef NANOLOOP_DISABLE_AI
 #include <onnxruntime_cxx_api.h>
 #endif
 
-namespace wspa {
+namespace nanoloop {
     class InferenceManager {
     public:
         InferenceManager(const std::wstring& model_path);
@@ -26,7 +26,7 @@ namespace wspa {
         bool verify_model_hash(const std::wstring& path, const std::string& expected_hex_hash);
 
     private:
-#ifndef WSPA_DISABLE_AI
+#ifndef NANOLOOP_DISABLE_AI
         Ort::Env m_env;
         std::unique_ptr<Ort::Session> m_session;
         Ort::MemoryInfo m_memory_info;
@@ -39,4 +39,4 @@ namespace wspa {
         // Gap #7: Power Request for Inference Cadence
         ScopedHandle m_power_request;
     };
-}
+} // namespace nanoloop

@@ -5,7 +5,7 @@
 #include <windows.h>
 #include "config_loader.hpp"
 
-namespace wspa {
+namespace nanoloop {
     namespace config {
         // Paths (Defaults)
         inline std::wstring MODEL_PATH = L"models/power_model.onnx";
@@ -42,25 +42,25 @@ namespace wspa {
         inline double SSS_THERMAL_WEIGHT = 0.10;
         inline double SSS_GPU_WEIGHT = 0.10;
         inline double SSS_DISK_WEIGHT = 0.10;
-
+ 
         // Governor settings
         inline int GOVERNOR_INTERVAL_MS = 5000;
         inline std::vector<std::string> EXCLUSION_LIST = { "csrss.exe", "dwm.exe", "explorer.exe", "svchost.exe" };
-
+ 
         // Watchdog settings
         inline int MAX_RECOVERY_ATTEMPTS = 3;
-
+ 
         // Telemetry Rotation settings
         inline int MAX_FILE_SIZE_MB = 50;
         inline int MAX_ROTATED_FILES = 5;
-
-        // Load config from wspa_config.ini
+ 
+        // Load config from nanoloop_config.ini
         inline bool load_from_file(const std::string& filepath) {
             ConfigLoader loader;
             if (!loader.load(filepath)) {
                 return false;
             }
-
+ 
             DATA_COLLECTION_MODE = loader.get_bool("general.data_collection", DATA_COLLECTION_MODE);
             
             std::string model_path_str = loader.get_string("general.model_path", "");
@@ -69,18 +69,18 @@ namespace wspa {
             }
             
             TELEMETRY_LOG_PATH = loader.get_string("general.telemetry_log_path", TELEMETRY_LOG_PATH);
-
+ 
             // [controller]
             MIN_CONTROL_LOOP_INTERVAL_MS = loader.get_int("controller.min_control_loop_interval_ms", MIN_CONTROL_LOOP_INTERVAL_MS);
             MAX_CONTROL_LOOP_INTERVAL_MS = loader.get_int("controller.max_control_loop_interval_ms", MAX_CONTROL_LOOP_INTERVAL_MS);
             TELEMETRY_INTERVAL_MS = loader.get_int("controller.telemetry_interval_ms", TELEMETRY_INTERVAL_MS);
             DIRTY_FLAG_EPSILON = loader.get_double("controller.dirty_flag_epsilon", DIRTY_FLAG_EPSILON);
-
+ 
             // [deadband]
             DEADBAND_HIGH_STRESS = loader.get_double("deadband.high_stress", DEADBAND_HIGH_STRESS);
             DEADBAND_MEDIUM_STRESS = loader.get_double("deadband.medium_stress", DEADBAND_MEDIUM_STRESS);
             DEADBAND_LOW_STRESS = loader.get_double("deadband.low_stress", DEADBAND_LOW_STRESS);
-
+ 
             // [stress_weights]
             double w_cpu = loader.get_double("stress_weights.cpu", SSS_CPU_WEIGHT);
             double w_queue = loader.get_double("stress_weights.queue", SSS_QUEUE_WEIGHT);
@@ -95,21 +95,21 @@ namespace wspa {
                 SSS_GPU_WEIGHT = w_gpu;
                 SSS_DISK_WEIGHT = w_disk;
             }
-
+ 
             // [governor]
             auto list = loader.get_list("governor.exclusion_list");
             if (!list.empty()) {
                 EXCLUSION_LIST = list;
             }
             GOVERNOR_INTERVAL_MS = loader.get_int("governor.governor_interval_ms", GOVERNOR_INTERVAL_MS);
-
+ 
             // [watchdog]
             MAX_RECOVERY_ATTEMPTS = loader.get_int("watchdog.max_recovery_attempts", MAX_RECOVERY_ATTEMPTS);
-
+ 
             // [telemetry_rotation]
             MAX_FILE_SIZE_MB = loader.get_int("telemetry_rotation.max_file_size_mb", MAX_FILE_SIZE_MB);
             MAX_ROTATED_FILES = loader.get_int("telemetry_rotation.max_rotated_files", MAX_ROTATED_FILES);
-
+ 
             return true;
         }
     }

@@ -1,6 +1,6 @@
-# 🛡️ WinSCADA Power Agent (WSPA)
+# 🛡️ nanoloop Power Agent
 
-[![Build & Test](https://github.com/geminipro123pakistan-ctrl/WinSCADA/actions/workflows/build.yml/badge.svg)](https://github.com/geminipro123pakistan-ctrl/WinSCADA/actions/workflows/build.yml)
+[![Build & Test](https://github.com/geminipro123pakistan-ctrl/nanoloop/actions/workflows/build.yml/badge.svg)](https://github.com/geminipro123pakistan-ctrl/nanoloop/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows-blue.svg)](https://microsoft.com/windows)
 
@@ -39,7 +39,7 @@ graph TD
 ```
 
 ### ⚡ Performance Benchmarks
-WSPA is engineered for ultra-low latency and minimal scheduler wakeups. The core control path is completely zero-allocation (`std::array` + `std::atomic`).
+nanoloop is engineered for ultra-low latency and minimal scheduler wakeups. The core control path is completely zero-allocation (`std::array` + `std::atomic`).
 - **Telemetry Ingestion (`TagDatabase::set`)**: ~14.8 ns/op
 - **Dirty-State Evaluation (`Controller::evaluate`)**: ~24.0 ns/op
 - **Mutex Contention**: 0 (Fully Lock-Free)
@@ -70,15 +70,15 @@ WSPA is engineered for ultra-low latency and minimal scheduler wakeups. The core
 * **Persistence:** Correctly negotiates scheme re-activation using strict GUID lifecycle management and dynamic schema duplication.
 
 ### 4. Safety & Recovery Layer (The Watchdog)
-* **Mutual Heartbeat Monitoring:** The watchdog process polls a lock-free named shared memory section (`Local\WinSCADA_Heartbeat`) updated by the agent. If the agent hangs (ticks stop advancing for 5 seconds), it is immediately terminated and recovered.
+* **Mutual Heartbeat Monitoring:** The watchdog process polls a lock-free named shared memory section (`Local\Nanoloop_Heartbeat`) updated by the agent. If the agent hangs (ticks stop advancing for 5 seconds), it is immediately terminated and recovered.
 * **Industrial Safe State Assertion:** The watchdog asserts the standard `Balanced` power scheme as a known-safe baseline upon agent crash/hang.
 * **Exponential Backoff:** Ensures cyclic failure resilience before attempting system recovery.
 
 ---
 
-## ⚙️ Configuration (`wspa_config.ini`)
+## ⚙️ Configuration (`nanoloop_config.ini`)
 
-All system variables are runtime-configurable via a lightweight `wspa_config.ini` placed in the executable directory. If not present, WSPA automatically falls back to hardened compile-time defaults.
+All system variables are runtime-configurable via a lightweight `nanoloop_config.ini` placed in the executable directory. If not present, nanoloop automatically falls back to hardened compile-time defaults.
 
 ### Reference Settings Table
 
@@ -114,7 +114,7 @@ All system variables are runtime-configurable via a lightweight `wspa_config.ini
 ### 🔨 Build & Validate
 To compile and test without local ONNX Runtime dependencies (disabled AI mode):
 ```powershell
-cmake -B build -DWSPA_DISABLE_AI=ON
+cmake -B build -DNANOLOOP_DISABLE_AI=ON
 cmake --build build --config Release
 ```
 
@@ -123,8 +123,8 @@ To run build-in CTest gates:
 ctest --test-dir build --output-on-failure
 ```
 
-### 🏃 Running WSPA
-Start WSPA by launching the watchdog to monitor the agent process:
+### 🏃 Running nanoloop
+Start nanoloop by launching the watchdog to monitor the agent process:
 ```powershell
 .\build\src\watchdog\Release\watchdog.exe .\build\src\agent\Release\agent.exe
 ```
@@ -133,7 +133,7 @@ Start WSPA by launching the watchdog to monitor the agent process:
 
 ## 🧹 Uninstalling
 
-WSPA includes a built-in clean uninstallation script to restore the host system to default settings and wipe telemetry files.
+nanoloop includes a built-in clean uninstallation script to restore the host system to default settings and wipe telemetry files.
 
 Run the uninstaller via PowerShell (requires Elevation):
 ```powershell
@@ -143,10 +143,10 @@ Powershell.exe -ExecutionPolicy Bypass -File .\scripts\uninstall.ps1
 This script will automatically:
 1. Safely stop the running `agent` and `watchdog` processes.
 2. Revert the active Windows power scheme to the system default `Balanced` scheme.
-3. Cleanly delete the `WinSCADA AI Optimized` power scheme from the OS.
+3. Cleanly delete both `WinSCADA AI Optimized` and `Nanoloop AI Optimized` power schemes from the OS.
 4. Purge all telemetry logs and rotated files.
 
 ---
 
 ## 📜 License
-MIT License. Copyright 2026 WinSCADA Contributors.
+MIT License. Copyright 2026 nanoloop Contributors.

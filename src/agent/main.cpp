@@ -17,7 +17,7 @@
 #include "controller.hpp"
 #include "governor.hpp"
 
-using namespace wspa;
+using namespace nanoloop;
 
 std::atomic<bool> g_running(true);
 std::atomic<bool> g_suspended(false);
@@ -84,7 +84,7 @@ void control_loop(TagDatabase& db, ActuatorManager& actuators, Controller& contr
     int interval_ms = config::MAX_CONTROL_LOOP_INTERVAL_MS;
     
     // Safety #1: Shared Memory Heartbeat IPC Writer
-    wspa::HeartbeatWriter heartbeat;
+    nanoloop::HeartbeatWriter heartbeat;
     if (heartbeat.valid()) {
         LOG_INFO("Main", "Shared memory heartbeat writer initialized successfully.");
     } else {
@@ -177,13 +177,13 @@ int main() {
 
     // 2. Load Configuration from INI file next to the executable
     std::string exe_dir = get_executable_directory();
-    std::string config_path = exe_dir.empty() ? "wspa_config.ini" : (exe_dir + "\\wspa_config.ini");
+    std::string config_path = exe_dir.empty() ? "nanoloop_config.ini" : (exe_dir + "\\nanoloop_config.ini");
 
     // Pre-initialize console mirror logging file next to executable
-    std::string log_file_path = exe_dir.empty() ? "wspa_agent.log" : (exe_dir + "\\wspa_agent.log");
+    std::string log_file_path = exe_dir.empty() ? "nanoloop_agent.log" : (exe_dir + "\\nanoloop_agent.log");
     log::LoggerState::instance().initFile(log_file_path);
 
-    LOG_INFO("Main", "--- Windows SCADA Power Agent (WSPA) ---");
+    LOG_INFO("Main", "--- nanoloop Power Agent ---");
 
     if (config::load_from_file(config_path)) {
         LOG_INFO("Main", "Configuration loaded from: " << config_path);
@@ -221,7 +221,7 @@ int main() {
     WNDCLASSA wc = { 0 };
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = GetModuleHandle(NULL);
-    wc.lpszClassName = "WSPA_MessageWindow";
+    wc.lpszClassName = "Nanoloop_MessageWindow";
     RegisterClassA(&wc);
     HWND hwnd = CreateWindowExA(0, wc.lpszClassName, NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, NULL, NULL);
 

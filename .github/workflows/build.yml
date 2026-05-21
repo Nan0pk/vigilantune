@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Configure CMake
-        run: cmake -B build -DWSPA_DISABLE_AI=ON
+        run: cmake -B build -DNANOLOOP_DISABLE_AI=ON
 
       - name: Build
         run: cmake --build build

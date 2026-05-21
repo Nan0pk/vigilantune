@@ -1,4 +1,4 @@
-# [WinSCADA] Power Monitoring Script
+# [nanoloop] Power Monitoring Script
 # Corrected for portability and accuracy
 # Fix for Significant #11: Use modern Get-CimInstance API
 
