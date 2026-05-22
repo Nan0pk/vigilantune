@@ -1,12 +1,12 @@
 # nanoloop Power Agent — Uninstall Script
-# Purpose: Cleanly removes both old WinSCADA and new Nanoloop AI Optimized power schemes,
+# Purpose: Cleanly removes the Nanoloop AI Optimized power scheme,
 #          stops running agent/watchdog processes, and deletes telemetry logs.
 # Usage:   Run from an elevated (Administrator) PowerShell prompt.
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$SchemeNames = @("WinSCADA AI Optimized", "Nanoloop AI Optimized")
+$SchemeNames = @("Nanoloop AI Optimized")
 $BalancedGuid = "381b4222-f694-41f0-9685-ff5bb260df2e"
 
 # --- Step 1: Stop agent/watchdog processes ---
@@ -75,7 +75,7 @@ if ($guidsToDelete.Count -gt 0) {
         }
     }
 } else {
-    Write-Host "      No nanoloop/WinSCADA power schemes found — nothing to delete." -ForegroundColor DarkGray
+    Write-Host "      No nanoloop power schemes found — nothing to delete." -ForegroundColor DarkGray
 }
 
 # --- Step 4: Remove telemetry logs ---

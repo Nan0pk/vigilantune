@@ -1,6 +1,6 @@
 # 🚀 nanoloop v0.3.0-beta: Project Rebranding & Version Bump
 
-Welcome to **nanoloop v0.3.0-beta**! This release marks the full rebranding of the project from **WinSCADA / WSPA** to **nanoloop**, namespace updates, version bumps, and various stability improvements.
+Welcome to **nanoloop v0.3.0-beta**! This release marks the full finalization of the project, including namespace updates, version bumps, and various stability improvements.
 
 ### ⚠️ IMPORTANT: PROTOTYPE STATUS
 This is a **Beta-stage developer preview**. nanoloop interacts with low-level Windows Power GUIDs and kernel-level performance counters. 
@@ -10,9 +10,9 @@ This is a **Beta-stage developer preview**. nanoloop interacts with low-level Wi
 ---
 
 ## ✨ Features in this Version
-- **Full Project Rebrand**: Rebranded all components and files from **WinSCADA / WSPA** to **nanoloop**.
-- **Namespace Migration**: Fully migrated all codebases and unit tests from `wspa` namespace to the modern `nanoloop` namespace.
-- **IPC Cohesion**: Renamed named Windows IPC heartbeat references from `Local\WinSCADA_Heartbeat` to `Local\Nanoloop_Heartbeat`.
+- **Full Project Rebrand**: Consolidated all core brand elements.
+- **Namespace Migration**: Migrated all codebases and unit tests to the modern `nanoloop` namespace.
+- **IPC Cohesion**: Configured named Windows IPC heartbeat references to `Local\Nanoloop_Heartbeat`.
 - **Power Scheme Alignment**: Updated the custom Windows power scheme name to `"Nanoloop AI Optimized"` and assigned an updated GUID scheme.
 - **Improved Uninstallation Flow**: Enhanced `uninstall.ps1` to cleanly remove both old and new power schemes and stop running processes.
 - **Hardened Safety Watchdog**: Multi-stage recovery with exponential backoff and fail-safe power reset. Includes resume-from-sleep cooldown robustness.

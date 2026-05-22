@@ -5,12 +5,12 @@ All notable changes to this project will be documented in this file.
 ## [0.3.0-beta] - 2026-05-21
 
 ### Added
-- **Project Rename**: Fully rebranded the project from **WinSCADA / WSPA** to **nanoloop**.
-- **Namespace Migration**: Migrated all C++ namespace declarations and imports from `wspa` to `nanoloop`.
-- **IPC Namespace Protection**: Renamed the lock-free shared memory heartbeat IPC channel from `Local\WinSCADA_Heartbeat` to `Local\Nanoloop_Heartbeat` to ensure synchronization and prevent conflicts.
+- **Project Identity**: Finalized all project name structures to **nanoloop**.
+- **Namespace Migration**: Migrated all C++ namespace declarations and imports to `nanoloop`.
+- **IPC Namespace Protection**: Standardized the lock-free shared memory heartbeat IPC channel to `Local\Nanoloop_Heartbeat` to ensure synchronization and prevent conflicts.
 - **Power Scheme Rebranding**: Rebranded the custom Windows power scheme to `"Nanoloop AI Optimized"` and updated its GUID (`GUID_NANOLOOP_SCHEME`).
-- **Compile-time Definitions**: Replaced compile-time AI toggles and logs (`WSPA_DISABLE_AI`, `WSPA_LOG_LEVEL`) with rebranded `NANOLOOP_DISABLE_AI` and `NANOLOOP_LOG_LEVEL` flags.
-- **Improved Uninstallation Script**: Updated `uninstall.ps1` to stop running processes and cleanly delete both old `WinSCADA AI Optimized` and new `Nanoloop AI Optimized` power schemes from the host OS.
+- **Compile-time Definitions**: Standardized compile-time AI toggles and logs to the new `NANOLOOP_DISABLE_AI` and `NANOLOOP_LOG_LEVEL` flags.
+- **Improved Uninstallation Script**: Updated `uninstall.ps1` to stop running processes and cleanly delete the `Nanoloop AI Optimized` power scheme from the host OS.
 - **Version Bump**: Bumped the project version to `0.3.0` across vcpkg manifests, assembly manifests, and documentation.
 
 ## [0.2.0-beta] - 2026-05-18

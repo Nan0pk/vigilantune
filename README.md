@@ -143,7 +143,7 @@ Powershell.exe -ExecutionPolicy Bypass -File .\scripts\uninstall.ps1
 This script will automatically:
 1. Safely stop the running `agent` and `watchdog` processes.
 2. Revert the active Windows power scheme to the system default `Balanced` scheme.
-3. Cleanly delete both `WinSCADA AI Optimized` and `Nanoloop AI Optimized` power schemes from the OS.
+3. Cleanly delete the `Nanoloop AI Optimized` power scheme from the OS.
 4. Purge all telemetry logs and rotated files.
 
 ---
