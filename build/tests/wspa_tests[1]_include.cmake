@@ -1,5 +1,0 @@
-if(EXISTS "C:/Users/Victus/build/tests/wspa_tests[1]_tests.cmake")
-  include("C:/Users/Victus/build/tests/wspa_tests[1]_tests.cmake")
-else()
-  add_test(wspa_tests_NOT_BUILT wspa_tests_NOT_BUILT)
-endif()

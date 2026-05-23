@@ -1,5 +1,0 @@
-if(EXISTS "C:/Users/Victus/build/tests/nanoloop_tests[1]_tests.cmake")
-  include("C:/Users/Victus/build/tests/nanoloop_tests[1]_tests.cmake")
-else()
-  add_test(nanoloop_tests_NOT_BUILT nanoloop_tests_NOT_BUILT)
-endif()

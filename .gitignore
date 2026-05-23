@@ -25,6 +25,8 @@ x64/
 x86/
 ARM/
 ARM64/
+build/
+out/
 
 # MSVC Build Artifacts
 *.exe
