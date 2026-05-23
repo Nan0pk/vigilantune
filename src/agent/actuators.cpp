@@ -24,6 +24,11 @@ DEFINE_GUID(GUID_SYSTEM_COOLING_POLICY, 0x94d3a615, 0xa899, 0x4ac5, 0xae, 0x2b, 
 
 namespace vigilantune {
     ActuatorManager::ActuatorManager() {
+        // Unhide required processor settings
+        PowerWriteSettingAttributes(&GUID_PROCESSOR_SETTINGS_SUBGROUP, &GUID_PROCESSOR_THROTTLE_MAX, 0);
+        PowerWriteSettingAttributes(&GUID_PROCESSOR_SETTINGS_SUBGROUP, &GUID_PROCESSOR_THROTTLE_MIN, 0);
+        PowerWriteSettingAttributes(&GUID_PROCESSOR_SETTINGS_SUBGROUP, &GUID_PROCESSOR_PERF_ENERGY_PREFERENCE, 0);
+        PowerWriteSettingAttributes(&GUID_PROCESSOR_SETTINGS_SUBGROUP, &GUID_SYSTEM_COOLING_POLICY, 0);
         bool found = false;
         GUID scheme_guid = { 0 };
         DWORD buffer_size = sizeof(GUID);

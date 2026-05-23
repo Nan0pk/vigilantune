@@ -3,6 +3,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <intrin.h>
 
 namespace nanoloop {}
 namespace vigilantune {}
@@ -85,8 +86,7 @@ namespace vigilantune {
         void set(TagID tag, double value) {
             size_t idx = static_cast<size_t>(tag);
             m_values[idx].store(value, std::memory_order_release);
-            auto now = std::chrono::duration_cast<std::chrono::microseconds>(
-                std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+            uint64_t now = __rdtsc();
             m_timestamps[idx].store(now, std::memory_order_release);
         }
 
