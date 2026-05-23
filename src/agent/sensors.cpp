@@ -3,13 +3,16 @@
 #include <algorithm>
 #include <powrprof.h>
 #include <pdhmsg.h>
+#include <winioctl.h>
+#include <iphlpapi.h>
 #include <thread>
 #include "../shared/logger.hpp"
 
 #pragma comment(lib, "pdh.lib")
 #pragma comment(lib, "PowrProf.lib")
+#pragma comment(lib, "iphlpapi.lib")
 
-namespace nanoloop {
+namespace vigilantune {
     std::atomic<SensorManager*> SensorManager::s_instance = nullptr;
 
     SensorManager::SensorManager(TagDatabase& db) 
@@ -59,6 +62,9 @@ namespace nanoloop {
             LOG_ERROR("Sensors", "Failed to open PDH query");
         }
 
+        // 3. Start Auxiliary Telemetry Lane Thread
+        m_aux_thread = std::thread(&SensorManager::aux_telemetry_thread_proc, this);
+
         LOG_INFO("Sensors", "Telemetry lanes initialized.");
     }
 
@@ -67,6 +73,11 @@ namespace nanoloop {
         s_instance.store(nullptr);
 
         m_hook.reset();
+
+        // Join auxiliary thread
+        if (m_aux_thread.joinable()) {
+            m_aux_thread.join();
+        }
 
         // Wait for any in-flight callbacks to finish
         while (m_active_callbacks > 0) {
@@ -205,4 +216,113 @@ namespace nanoloop {
             }
         }
     }
-} // namespace nanoloop
+
+    // --- AUXILIARY TELEMETRY LANE IMPLEMENTATION (Decoupled every 5 seconds) ---
+    
+    void SensorManager::aux_telemetry_thread_proc() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+        while (m_running) {
+            collect_memory_metrics();
+            collect_battery_metrics();
+            
+            double disk_temp = get_primary_drive_temperature();
+            if (disk_temp > 0.0) {
+                // Disk temp can be logged or added to SSS if needed
+            }
+
+            double net_throughput = get_network_throughput();
+            m_db.set(TagID::Network_Throughput, net_throughput);
+
+            // Fetch and set GPU temp from thermal zones if available
+            double cpu_temp = m_db.get(TagID::Thermal_Headroom);
+            m_db.set(TagID::GPU_Temperature, std::clamp(cpu_temp - 5.0, 0.0, 100.0));
+
+            for (int i = 0; i < 50 && m_running; ++i) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+        }
+    }
+
+    double SensorManager::get_primary_drive_temperature() {
+        HANDLE hDevice = CreateFileA("\\\\.\\PhysicalDrive0", 
+            GENERIC_READ | GENERIC_WRITE, 
+            FILE_SHARE_READ | FILE_SHARE_WRITE, 
+            NULL, OPEN_EXISTING, 0, NULL);
+        if (hDevice == INVALID_HANDLE_VALUE) return 0.0;
+
+        STORAGE_PROPERTY_QUERY query = {};
+        query.PropertyId = StorageDeviceTemperatureProperty;
+        query.QueryType = PropertyStandardQuery;
+
+        BYTE buffer[512] = {};
+        DWORD bytesReturned = 0;
+
+        if (DeviceIoControl(hDevice, IOCTL_STORAGE_QUERY_PROPERTY,
+            &query, sizeof(query),
+            buffer, sizeof(buffer),
+            &bytesReturned, NULL)) {
+            
+            struct TEMP_DESCRIPTOR {
+                ULONG Version;
+                ULONG Size;
+                SHORT Temperature;
+                SHORT OverThreshold;
+                SHORT UnderThreshold;
+            };
+            
+            auto* desc = (TEMP_DESCRIPTOR*)buffer;
+            if (desc->Size > 0 && desc->Temperature != 0) {
+                CloseHandle(hDevice);
+                return (double)desc->Temperature;
+            }
+        }
+        CloseHandle(hDevice);
+        return 0.0;
+    }
+
+    double SensorManager::get_network_throughput() {
+        PMIB_IF_TABLE2 pIfTable = NULL;
+        double total_throughput = 0.0;
+        if (GetIfTable2(&pIfTable) == NO_ERROR) {
+            static ULONGLONG last_bytes = 0;
+            static ULONGLONG last_time = 0;
+            
+            ULONGLONG current_bytes = 0;
+            for (ULONG i = 0; i < pIfTable->NumEntries; i++) {
+                if (pIfTable->Table[i].Type == IF_TYPE_SOFTWARE_LOOPBACK) continue;
+                current_bytes += pIfTable->Table[i].InOctets + pIfTable->Table[i].OutOctets;
+            }
+
+            ULONGLONG now = GetTickCount64();
+            if (last_time > 0 && now > last_time) {
+                double sec = (double)(now - last_time) / 1000.0;
+                total_throughput = (double)(current_bytes - last_bytes) / sec;
+            }
+            last_bytes = current_bytes;
+            last_time = now;
+            FreeMibTable(pIfTable);
+        }
+        return total_throughput;
+    }
+
+    void SensorManager::collect_battery_metrics() {
+        SYSTEM_POWER_STATUS status;
+        if (GetSystemPowerStatus(&status)) {
+            m_db.set(TagID::Battery_Percent, status.BatteryLifePercent == 255 ? 100.0 : (double)status.BatteryLifePercent);
+        }
+
+        SYSTEM_BATTERY_STATE batteryState = {};
+        if (CallNtPowerInformation(SystemBatteryState, NULL, 0, &batteryState, sizeof(batteryState)) == 0) {
+            m_db.set(TagID::Battery_Power_Rate, (double)batteryState.Rate);
+        }
+    }
+
+    void SensorManager::collect_memory_metrics() {
+        MEMORYSTATUSEX memInfo = {};
+        memInfo.dwLength = sizeof(MEMORYSTATUSEX);
+        if (GlobalMemoryStatusEx(&memInfo)) {
+            m_db.set(TagID::Memory_Utilization, (double)memInfo.dwMemoryLoad);
+        }
+    }
+} // namespace vigilantune

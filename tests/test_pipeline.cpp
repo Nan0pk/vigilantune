@@ -6,6 +6,7 @@
 #include <thread>
 #include <chrono>
 
+using namespace vigilantune;
 using namespace nanoloop;
 
 TEST(PipelineTest, FullFlow) {

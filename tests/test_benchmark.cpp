@@ -4,6 +4,7 @@
 #include <chrono>
 #include <iostream>
 
+using namespace vigilantune;
 using namespace nanoloop;
 
 TEST(BenchmarkTest, TagDatabaseLatency) {

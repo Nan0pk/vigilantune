@@ -2,6 +2,7 @@
 #include "../src/agent/actuators.hpp"
 #include <iostream>
 
+using namespace vigilantune;
 using namespace nanoloop;
 
 class TestActuator : public ActuatorManager {

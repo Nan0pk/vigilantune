@@ -4,11 +4,14 @@
 #include <atomic>
 #include <chrono>
 
-namespace nanoloop {
+namespace nanoloop {}
+namespace vigilantune {}
+
+namespace vigilantune {
     enum class TagID : size_t {
         CPU_Utilization = 0,
         Thread_Queue_Length,
-        Thermal_Headroom,
+        Thermal_Headroom, // CPU Temperature
         GPU_Utilization,
         Disk_Utilization,
         CPU_Frequency_Avg,
@@ -16,12 +19,20 @@ namespace nanoloop {
         Timer_Resolution_100ns,
         Timer_Pollution,
         Foreground_App_Hash,
+        GPU_Temperature,
+        Battery_Percent,
+        Battery_Power_Rate,
+        Network_Throughput,
+        Memory_Utilization,
         MAX_TAGS
     };
 
     enum class ActuatorID : size_t {
         PerformanceBoost = 0,
         ProcessorFloor,
+        EnergyPreference,
+        SystemCooling,
+        TimerCadence,
         MAX_ACTUATORS
     };
 
@@ -96,4 +107,4 @@ namespace nanoloop {
         std::array<std::atomic<double>, static_cast<size_t>(TagID::MAX_TAGS)> m_values;
         std::array<std::atomic<uint64_t>, static_cast<size_t>(TagID::MAX_TAGS)> m_timestamps;
     };
-}
+} // namespace vigilantune

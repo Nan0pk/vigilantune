@@ -2,6 +2,7 @@
 #include "../src/agent/sensors.hpp"
 #include "../shared/types.hpp"
 
+using namespace vigilantune;
 using namespace nanoloop;
 
 TEST(SensorTest, Lifecycle) {

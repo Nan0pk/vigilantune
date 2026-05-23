@@ -6,11 +6,14 @@
 #include "../shared/config.hpp"
 #include "../shared/logger.hpp"
 
-namespace nanoloop {
+namespace vigilantune {
     Controller::Controller() : m_last_stress_score(0.0) {
 #ifndef NANOLOOP_DISABLE_AI
-        m_inference = std::make_unique<InferenceManager>(config::MODEL_PATH);
+        m_inference = std::make_unique<nanoloop::InferenceManager>(nanoloop::config::MODEL_PATH);
 #endif
+        m_ecu_tables.push_back(ECUMapRegistry::get_default_epp_map());
+        m_ecu_tables.push_back(ECUMapRegistry::get_default_timer_map());
+        m_ecu_tables.push_back(ECUMapRegistry::get_default_cooling_map());
     }
 
     Controller::~Controller() {}
@@ -21,13 +24,11 @@ namespace nanoloop {
         
         result.stress_score = calculate_stress_score(db_snapshot);
         
-        // Architecture #3: Adaptive Loop Interval
-        // Higher stress -> lower interval (faster response)
         double stress_norm = result.stress_score / 100.0;
-        result.recommended_interval_ms = (int)(config::MAX_CONTROL_LOOP_INTERVAL_MS - 
-            (stress_norm * (config::MAX_CONTROL_LOOP_INTERVAL_MS - config::MIN_CONTROL_LOOP_INTERVAL_MS)));
+        result.recommended_interval_ms = (int)(nanoloop::config::MAX_CONTROL_LOOP_INTERVAL_MS - 
+            (stress_norm * (nanoloop::config::MAX_CONTROL_LOOP_INTERVAL_MS - nanoloop::config::MIN_CONTROL_LOOP_INTERVAL_MS)));
 
-        if (m_first_run || db_snapshot.is_dirty(m_last_state, config::DIRTY_FLAG_EPSILON)) {
+        if (m_first_run || db_snapshot.is_dirty(m_last_state, nanoloop::config::DIRTY_FLAG_EPSILON)) {
             result.adjustments = compute_adjustments(db_snapshot, result.stress_score);
             
             m_last_state = db_snapshot;
@@ -41,8 +42,17 @@ namespace nanoloop {
     ActuationSet Controller::compute_adjustments(const TagSnapshot& snapshot, double stress_score) {
         ActuationSet adjustments;
 
-        float app_hash = (float)snapshot.values[static_cast<size_t>(TagID::Foreground_App_Hash)];
+        // 1. Bilinear ECU Mapping Engine Calculations
+        for (const auto& table : m_ecu_tables) {
+            double x_val = snapshot.values[static_cast<size_t>(table.x_axis_tag)];
+            double y_val = snapshot.values[static_cast<size_t>(table.y_axis_tag)];
+            
+            double target_out = table.lookup(x_val, y_val);
+            adjustments.set(table.target_actuator, target_out);
+        }
 
+        // 2. Backward Compatibility / Inference Fallback Block
+        float app_hash = (float)snapshot.values[static_cast<size_t>(TagID::Foreground_App_Hash)];
         m_inference_inputs[0] = (float)snapshot.values[static_cast<size_t>(TagID::CPU_Utilization)];
         m_inference_inputs[1] = (float)snapshot.values[static_cast<size_t>(TagID::Thread_Queue_Length)];
         m_inference_inputs[2] = (float)stress_score;
@@ -50,7 +60,6 @@ namespace nanoloop {
         m_inference_inputs[4] = (float)m_last_stress_score;
 
         bool ai_used = false;
-
 #ifndef NANOLOOP_DISABLE_AI
         if (m_inference) {
             std::vector<float> in_vec(m_inference_inputs.begin(), m_inference_inputs.end());
@@ -77,7 +86,7 @@ namespace nanoloop {
             }
         }
 
-        if (config::DATA_COLLECTION_MODE) {
+        if (nanoloop::config::DATA_COLLECTION_MODE) {
             log_snapshot(m_inference_inputs, adjustments.values[static_cast<size_t>(ActuatorID::PerformanceBoost)]);
         }
 
@@ -91,12 +100,11 @@ namespace nanoloop {
     }
 
     void Controller::log_snapshot(const std::array<float, 5>& inputs, double label) {
-        std::string filepath = config::TELEMETRY_LOG_PATH;
-        uint64_t max_bytes = static_cast<uint64_t>(config::MAX_FILE_SIZE_MB) * 1024 * 1024;
+        std::string filepath = nanoloop::config::TELEMETRY_LOG_PATH;
+        uint64_t max_bytes = static_cast<uint64_t>(nanoloop::config::MAX_FILE_SIZE_MB) * 1024 * 1024;
 
-        // Perform log rotation if file size limit exceeded
         if (get_file_size(filepath) >= max_bytes) {
-            int max_idx = config::MAX_ROTATED_FILES;
+            int max_idx = nanoloop::config::MAX_ROTATED_FILES;
             auto dot = filepath.rfind('.');
             if (dot != std::string::npos) {
                 std::string oldest = filepath.substr(0, dot) + "_" + std::to_string(max_idx) + filepath.substr(dot);
@@ -145,16 +153,23 @@ namespace nanoloop {
         double thermal = db.values[static_cast<size_t>(TagID::Thermal_Headroom)];
         double gpu = db.values[static_cast<size_t>(TagID::GPU_Utilization)];
         double disk = db.values[static_cast<size_t>(TagID::Disk_Utilization)];
+        
+        double ram = db.values[static_cast<size_t>(TagID::Memory_Utilization)];
+        double battery_rate = db.values[static_cast<size_t>(TagID::Battery_Power_Rate)];
 
         double queue_norm = std::clamp(std::log1p(queue) / std::log1p(50.0) * 100.0, 0.0, 100.0);
         double thermal_pressure = std::clamp((thermal - 60.0) / 40.0, 0.0, 1.0) * 100.0;
         
-        double sss = (cpu * config::SSS_CPU_WEIGHT) + 
-                     (queue_norm * config::SSS_QUEUE_WEIGHT) + 
-                     (thermal_pressure * config::SSS_THERMAL_WEIGHT) +
-                     (gpu * config::SSS_GPU_WEIGHT) +
-                     (disk * config::SSS_DISK_WEIGHT);
+        double battery_drain_factor = battery_rate < 0.0 ? std::clamp(std::abs(battery_rate) / 25000.0 * 100.0, 0.0, 100.0) : 0.0;
+
+        double sss = (cpu * nanoloop::config::SSS_CPU_WEIGHT) + 
+                     (queue_norm * nanoloop::config::SSS_QUEUE_WEIGHT) + 
+                     (thermal_pressure * nanoloop::config::SSS_THERMAL_WEIGHT) +
+                     (gpu * nanoloop::config::SSS_GPU_WEIGHT) +
+                     (disk * nanoloop::config::SSS_DISK_WEIGHT) +
+                     (ram * 0.05) + 
+                     (battery_drain_factor * 0.05);
         
         return std::clamp(sss, 0.0, 100.0);
     }
-} // namespace nanoloop
+} // namespace vigilantune

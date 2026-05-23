@@ -3,6 +3,10 @@
 #include <fstream>
 #include <filesystem>
 
+namespace nanoloop {}
+namespace vigilantune {}
+
+using namespace vigilantune;
 using namespace nanoloop;
 
 class TestInferenceManager : public InferenceManager {

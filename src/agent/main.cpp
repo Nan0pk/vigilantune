@@ -1,4 +1,9 @@
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <winsock2.h>
 #include <windows.h>
+#include <shellapi.h>
 #include <thread>
 #include <chrono>
 #include <iomanip>
@@ -17,7 +22,7 @@
 #include "controller.hpp"
 #include "governor.hpp"
 
-using namespace nanoloop;
+using namespace vigilantune;
 
 std::atomic<bool> g_running(true);
 std::atomic<bool> g_suspended(false);
@@ -33,7 +38,7 @@ void DisableEfficiencyMode() {
     powerThrottling.StateMask = 0; // Turn OFF Power Throttling
 
     if (!SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling, &powerThrottling, sizeof(powerThrottling))) {
-        // Fallback or log if unsupported (older Win10)
+        // Fallback if unsupported (older Win10)
     }
 }
 
@@ -46,7 +51,7 @@ bool IsWatchdogRunning() {
         pe32.dwSize = sizeof(PROCESSENTRY32);
         if (Process32First(hSnapshot, &pe32)) {
             do {
-                if (std::string(pe32.szExeFile) == "watchdog.exe") {
+                if (std::string(pe32.szExeFile) == "watchdog.exe" || std::string(pe32.szExeFile) == "vigilantune_watchdog.exe") {
                     running = true;
                     break;
                 }
@@ -65,23 +70,23 @@ void telemetry_thread(SensorManager& sensors) {
         }
         
         std::unique_lock<std::mutex> lock(g_shutdown_mutex);
-        g_shutdown_cv.wait_for(lock, std::chrono::milliseconds(config::TELEMETRY_INTERVAL_MS), [] { return !g_running.load(); });
+        g_shutdown_cv.wait_for(lock, std::chrono::milliseconds(nanoloop::config::TELEMETRY_INTERVAL_MS), [] { return !g_running.load(); });
     }
 }
 
-void governor_thread(ProcessGovernor& governor) {
+void governor_thread(nanoloop::ProcessGovernor& governor) {
     while (g_running) {
         if (!g_suspended && !g_battery_saver) {
             governor.govern();
         }
         
         std::unique_lock<std::mutex> lock(g_shutdown_mutex);
-        g_shutdown_cv.wait_for(lock, std::chrono::milliseconds(config::GOVERNOR_INTERVAL_MS), [] { return !g_running.load(); });
+        g_shutdown_cv.wait_for(lock, std::chrono::milliseconds(nanoloop::config::GOVERNOR_INTERVAL_MS), [] { return !g_running.load(); });
     }
 }
 
 void control_loop(TagDatabase& db, ActuatorManager& actuators, Controller& controller) {
-    int interval_ms = config::MAX_CONTROL_LOOP_INTERVAL_MS;
+    int interval_ms = nanoloop::config::MAX_CONTROL_LOOP_INTERVAL_MS;
     
     // Safety #1: Shared Memory Heartbeat IPC Writer
     nanoloop::HeartbeatWriter heartbeat;
@@ -118,7 +123,6 @@ void control_loop(TagDatabase& db, ActuatorManager& actuators, Controller& contr
             heartbeat.tick();
         }
 
-        // Architecture #1: Mutual Monitoring - Alert if watchdog is missing
         static int watchdog_check_counter = 0;
         if (++watchdog_check_counter > 50) { // Check every ~5-10 seconds
             if (!IsWatchdogRunning()) {
@@ -170,42 +174,76 @@ std::string get_executable_directory() {
     return "";
 }
 
+bool IsRunAsAdmin() {
+    BOOL fRet = FALSE;
+    HANDLE hToken = NULL;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
+        TOKEN_ELEVATION elevation;
+        DWORD cbSize = sizeof(TOKEN_ELEVATION);
+        if (GetTokenInformation(hToken, TokenElevation, &elevation, sizeof(elevation), &cbSize)) {
+            fRet = elevation.TokenIsElevated;
+        }
+    }
+    if (hToken) {
+        CloseHandle(hToken);
+    }
+    return fRet;
+}
+
+void EnsureAdminElevation() {
+    if (!IsRunAsAdmin()) {
+        char szPath[MAX_PATH];
+        if (GetModuleFileNameA(NULL, szPath, ARRAYSIZE(szPath))) {
+            SHELLEXECUTEINFOA sei = { sizeof(sei) };
+            sei.cbSize = sizeof(sei);
+            sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+            sei.lpVerb = "runas";
+            sei.lpFile = szPath;
+            sei.hwnd = NULL;
+            sei.nShow = SW_NORMAL;
+            if (ShellExecuteExA(&sei)) {
+                ExitProcess(0);
+            }
+        }
+    }
+}
+
 int main() {
-    // 1. Initialize Anti-Throttling & Priority
+    // 1. Enforce Administrator Self-Elevation on launch
+    EnsureAdminElevation();
+
+    // 2. Initialize Anti-Throttling & Priority
     DisableEfficiencyMode();
     SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
 
-    // 2. Load Configuration from INI file next to the executable
     std::string exe_dir = get_executable_directory();
     std::string config_path = exe_dir.empty() ? "nanoloop_config.ini" : (exe_dir + "\\nanoloop_config.ini");
 
-    // Pre-initialize console mirror logging file next to executable
     std::string log_file_path = exe_dir.empty() ? "nanoloop_agent.log" : (exe_dir + "\\nanoloop_agent.log");
-    log::LoggerState::instance().initFile(log_file_path);
+    nanoloop::log::LoggerState::instance().initFile(log_file_path);
 
-    LOG_INFO("Main", "--- nanoloop Power Agent ---");
+    LOG_INFO("Main", "--- VigilanTune Power Agent ---");
 
-    if (config::load_from_file(config_path)) {
+    if (nanoloop::config::load_from_file(config_path)) {
         LOG_INFO("Main", "Configuration loaded from: " << config_path);
     } else {
         LOG_WARN("Main", "Configuration file not found or invalid at: " << config_path << ". Using defaults.");
     }
 
-    // Dynamic runtime logging level override
     std::string log_level = "INFO";
-    ConfigLoader loader;
+    nanoloop::ConfigLoader loader;
     if (loader.load(config_path)) {
         log_level = loader.get_string("general.log_level", "INFO");
     }
-    log::Level level = log::Level::INFO;
+    nanoloop::log::Level level = nanoloop::log::Level::INFO;
     std::transform(log_level.begin(), log_level.end(), log_level.begin(), ::toupper);
-    if (log_level == "TRACE") level = log::Level::TRACE;
-    else if (log_level == "DEBUG") level = log::Level::DEBUG;
-    else if (log_level == "INFO") level = log::Level::INFO;
-    else if (log_level == "WARN") level = log::Level::WARN;
-    else if (log_level == "ERROR") level = log::Level::ERROR_LVL;
-    else if (log_level == "FATAL") level = log::Level::FATAL;
-    log::LoggerState::instance().setLevel(level);
+    if (log_level == "TRACE") level = nanoloop::log::Level::TRACE;
+    else if (log_level == "DEBUG") level = nanoloop::log::Level::DEBUG;
+    else if (log_level == "INFO") level = nanoloop::log::Level::INFO;
+    else if (log_level == "WARN") level = nanoloop::log::Level::WARN;
+    else if (log_level == "ERROR") level = nanoloop::log::Level::ERROR_LVL;
+    else if (log_level == "FATAL") level = nanoloop::log::Level::FATAL;
+    nanoloop::log::LoggerState::instance().setLevel(level);
 
     static DWORD s_mainThreadId = GetCurrentThreadId();
 
@@ -213,15 +251,14 @@ int main() {
     SensorManager sensors(db);
     ActuatorManager actuators;
     Controller controller;
-    ProcessGovernor governor;
+    nanoloop::ProcessGovernor governor;
 
     sensors.start();
 
-    // 3. Setup Message Window for Power Events
     WNDCLASSA wc = { 0 };
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = GetModuleHandle(NULL);
-    wc.lpszClassName = "Nanoloop_MessageWindow";
+    wc.lpszClassName = "VigilanTune_MessageWindow";
     RegisterClassA(&wc);
     HWND hwnd = CreateWindowExA(0, wc.lpszClassName, NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, NULL, NULL);
 

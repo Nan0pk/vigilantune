@@ -90,33 +90,35 @@ namespace nanoloop {
         status = BCryptGetProperty(hAlg, BCRYPT_HASH_LENGTH, (PBYTE)&cbHash, sizeof(DWORD), &cbData, 0);
         if (status != 0) goto cleanup;
 
-        std::vector<BYTE> hashObject(cbHashObject);
-        std::vector<BYTE> hash(cbHash);
-        
-        status = BCryptCreateHash(hAlg, &hHash, hashObject.data(), cbHashObject, NULL, 0, 0);
-        if (status != 0) goto cleanup;
-
-        BYTE buffer[4096];
-        DWORD bytesRead;
-        while (ReadFile(hFile.get(), buffer, sizeof(buffer), &bytesRead, NULL) && bytesRead > 0) {
-            status = BCryptHashData(hHash, buffer, bytesRead, 0);
+        {
+            std::vector<BYTE> hashObject(cbHashObject);
+            std::vector<BYTE> hash(cbHash);
+            
+            status = BCryptCreateHash(hAlg, &hHash, hashObject.data(), cbHashObject, NULL, 0, 0);
             if (status != 0) goto cleanup;
-        }
 
-        status = BCryptFinishHash(hHash, hash.data(), cbHash, 0);
-        if (status != 0) goto cleanup;
+            BYTE buffer[4096];
+            DWORD bytesRead;
+            while (ReadFile(hFile.get(), buffer, sizeof(buffer), &bytesRead, NULL) && bytesRead > 0) {
+                status = BCryptHashData(hHash, buffer, bytesRead, 0);
+                if (status != 0) goto cleanup;
+            }
 
-        std::stringstream ss;
-        for (BYTE b : hash) ss << std::hex << std::setw(2) << std::setfill('0') << (int)b;
-        std::string actual_hash = ss.str();
+            status = BCryptFinishHash(hHash, hash.data(), cbHash, 0);
+            if (status != 0) goto cleanup;
 
-        if (actual_hash == expected_hex_hash) {
-            LOG_INFO("Inference", "SHA-256 Verified: " << actual_hash.substr(0, 8) << "...");
-            success = true;
-        } else {
-            LOG_ERROR("Inference", "Hash mismatch!");
-            LOG_ERROR("Inference", "  Expected: " << expected_hex_hash);
-            LOG_ERROR("Inference", "  Actual:   " << actual_hash);
+            std::stringstream ss;
+            for (BYTE b : hash) ss << std::hex << std::setw(2) << std::setfill('0') << (int)b;
+            std::string actual_hash = ss.str();
+
+            if (actual_hash == expected_hex_hash) {
+                LOG_INFO("Inference", "SHA-256 Verified: " << actual_hash.substr(0, 8) << "...");
+                success = true;
+            } else {
+                LOG_ERROR("Inference", "Hash mismatch!");
+                LOG_ERROR("Inference", "  Expected: " << expected_hex_hash);
+                LOG_ERROR("Inference", "  Actual:   " << actual_hash);
+            }
         }
 
     cleanup:
