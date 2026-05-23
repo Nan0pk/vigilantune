@@ -2,8 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.3.0-beta] - 2026-05-21
+## [0.4.0-ecu] - 2026-05-23
 
+### Added
+- **Project Identity**: Rebranded the fork to **VigilanTune**.
+- **ECU Mapping Engine**: Replaced linear fallback math with a zero-allocation, 2D bilinear interpolation engine (`ecu_engine.hpp`).
+- **Dynamic INI Map Loading**: ECU tables (EPP, Timer Resolution, Cooling Policy) are now dynamically parsed from `nanoloop_config.ini` at runtime.
+- **Auxiliary Telemetry Lane**: Added decoupled low-priority telemetry gathering for SMART NVMe/SSD temperatures, Battery discharge rate, Memory, and Network load.
+- **UAC Self-Elevation**: The agent now detects integrity levels on startup and automatically prompts UAC to elevate itself via the `runas` verb, ensuring access to hardware APIs.
+
+## [0.3.0-beta] - 2026-05-21
 ### Added
 - **Project Identity**: Finalized all project name structures to **nanoloop**.
 - **Namespace Migration**: Migrated all C++ namespace declarations and imports to `nanoloop`.

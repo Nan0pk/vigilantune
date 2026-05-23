@@ -1,10 +1,10 @@
-# 🛡️ NanoLoop Power Agent
+# 🛡️ VigilanTune Power Agent
 
 [![Build & Test](https://github.com/geminipro123pakistan-ctrl/nanoloop/actions/workflows/build.yml/badge.svg)](https://github.com/geminipro123pakistan-ctrl/nanoloop/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows-blue.svg)](https://microsoft.com/windows)
 
-An intelligent, ultra-low-latency background optimization agent designed for Windows. Operating like an industrial Supervisory Control and Data Acquisition (SCADA) system, it dynamically balances system responsiveness and battery longevity by intercepting OS events, evaluating state telemetry via an embedded ONNX machine learning model, and tuning hardware power registers via native Win32 APIs.
+An intelligent, ultra-low-latency background optimization agent designed for Windows. Operating like an industrial Supervisory Control and Data Acquisition (SCADA) system, it dynamically balances system responsiveness and battery longevity by intercepting OS events, evaluating state telemetry via an embedded ONNX machine learning model, and tuning hardware power registers via native Win32 APIs and multi-dimensional ECU mapping grids.
 
 ---
 
@@ -19,10 +19,12 @@ graph TD
         C[High-Fidelity PDH Metrics] -->|CPU/GPU/Thermal/Disk| B
     end
 
-    subgraph Agent ["Core Agent (agent.exe)"]
+    subgraph Agent ["Core Agent (vigilantune.exe)"]
         B -->|Atomic Snapshot| D[Stress Controller]
         D -->|Inference Inputs| E[ONNX Inference Engine]
+        D -->|Multi-Dimensional Input| ECU[Bilinear ECU Engine]
         E -->|Model Evaluation| F[Actuator Pipeline]
+        ECU -->|Interpolated Target| F
         F -->|Adaptive Deadband| G[Win32 Power APIs]
         D -->|Heartbeat Ticks| H[Lock-Free Shared Memory IPC]
     end
@@ -101,6 +103,9 @@ All system variables are runtime-configurable via a lightweight `nanoloop_config
 | `[watchdog]` | `max_recovery_attempts` | `3` | Maximum recovery restarts before watchdog safely exits. |
 | `[telemetry_rotation]` | `max_file_size_mb` | `50` | Max telemetry file size in MB before initiating shift rotation. |
 | `[telemetry_rotation]` | `max_rotated_files` | `5` | Maximum number of rotated files to retain. |
+| `[ecu_table_epp]` | `x_ticks, y_ticks, grid` | *(Hardcoded defaults)* | Dynamic 5x5 lookup grid for CPU Energy Performance Preference. |
+| `[ecu_table_timer]` | `x_ticks, y_ticks, grid` | *(Hardcoded defaults)* | Dynamic 5x5 lookup grid for OS Timer Resolution overrides. |
+| `[ecu_table_cooling]` | `x_ticks, y_ticks, grid` | *(Hardcoded defaults)* | Dynamic 5x5 lookup grid for System Cooling Policy. |
 
 ---
 
@@ -123,8 +128,8 @@ To run build-in CTest gates:
 ctest --test-dir build --output-on-failure
 ```
 
-### 🏃 Running nanoloop
-Start nanoloop by launching the watchdog to monitor the agent process:
+### 🏃 Running VigilanTune
+Start the agent by launching the watchdog to monitor the main process. Note: The agent requires Administrator privileges and will automatically prompt UAC if launched as a standard user:
 ```powershell
 .\build\src\watchdog\Release\watchdog.exe .\build\src\agent\Release\agent.exe
 ```
