@@ -12,6 +12,7 @@
 #include <thread>
 #include "../shared/types.hpp"
 #include "../shared/scoped_handle.hpp"
+#include "gpu_telemetry.hpp"
 
 namespace vigilantune {
     class SensorManager {
@@ -61,5 +62,7 @@ namespace vigilantune {
             ULONG  MaxIdleState;
             ULONG  CurrentIdleState;
         };
+
+        GpuTelemetryLoader m_gpu_loader;
     };
 } // namespace vigilantune

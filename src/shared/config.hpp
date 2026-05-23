@@ -10,6 +10,7 @@ namespace nanoloop {
         // Paths (Defaults)
         inline std::wstring MODEL_PATH = L"models/power_model.onnx";
         inline std::string TELEMETRY_LOG_PATH = "models/telemetry_log.csv";
+        inline std::string CONFIG_FILE_PATH = "nanoloop_config.ini";
         
         // Security: Model Verification (SHA-256)
         // Set this to the hash output of models/train.py

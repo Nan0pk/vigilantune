@@ -11,9 +11,32 @@ namespace vigilantune {
 #ifndef NANOLOOP_DISABLE_AI
         m_inference = std::make_unique<nanoloop::InferenceManager>(nanoloop::config::MODEL_PATH);
 #endif
-        m_ecu_tables.push_back(ECUMapRegistry::get_default_epp_map());
-        m_ecu_tables.push_back(ECUMapRegistry::get_default_timer_map());
-        m_ecu_tables.push_back(ECUMapRegistry::get_default_cooling_map());
+        nanoloop::ConfigLoader loader;
+        loader.load(nanoloop::config::CONFIG_FILE_PATH);
+
+        auto load_table = [&](const std::string& section, const ECUTable2D& def) -> ECUTable2D {
+            auto x_ticks = loader.get_double_list(section + ".x_ticks");
+            auto y_ticks = loader.get_double_list(section + ".y_ticks");
+            auto grid = loader.get_double_list(section + ".grid");
+
+            if (x_ticks.size() == 5 && y_ticks.size() == 5 && grid.size() == 25) {
+                ECUTable2D t = def;
+                for (int i = 0; i < 5; ++i) {
+                    t.x_ticks[i] = x_ticks[i];
+                    t.y_ticks[i] = y_ticks[i];
+                    for (int j = 0; j < 5; ++j) {
+                        t.grid[i][j] = grid[i * 5 + j];
+                    }
+                }
+                LOG_INFO("Controller", "Loaded dynamic ECU table: " << section);
+                return t;
+            }
+            return def;
+        };
+
+        m_ecu_tables.push_back(load_table("ecu_table_epp", ECUMapRegistry::get_default_epp_map()));
+        m_ecu_tables.push_back(load_table("ecu_table_timer", ECUMapRegistry::get_default_timer_map()));
+        m_ecu_tables.push_back(load_table("ecu_table_cooling", ECUMapRegistry::get_default_cooling_map()));
     }
 
     Controller::~Controller() {}

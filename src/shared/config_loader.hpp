@@ -113,6 +113,24 @@ namespace nanoloop {
             return result;
         }
 
+        // Get a comma-separated list as a vector of doubles
+        std::vector<double> get_double_list(const std::string& key) const {
+            std::vector<double> result;
+            std::string val = get_string(key);
+            if (val.empty()) return result;
+
+            std::stringstream ss(val);
+            std::string item;
+            while (std::getline(ss, item, ',')) {
+                item = trim(item);
+                if (!item.empty()) {
+                    try { result.push_back(std::stod(item)); }
+                    catch (...) { /* ignore invalid items */ }
+                }
+            }
+            return result;
+        }
+
     private:
         static std::string trim(const std::string& s) {
             auto start = s.find_first_not_of(" \t\r\n");

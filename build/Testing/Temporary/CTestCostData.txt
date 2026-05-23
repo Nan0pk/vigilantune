@@ -1,0 +1,14 @@
+TagDatabaseTest.ConcurrencyStress 16 0.00708698
+TagDatabaseTest.SnapshotConsistency 16 0.000942744
+ControllerTest.SSSCalculation 15 0.00445756
+ControllerTest.DirtyFlagEpsilon 15 0.00198398
+ActuatorTest.DeadbandCalculation 16 0.00745129
+ActuatorTest.AdaptiveFiltering 16 0.00431736
+InferenceTest.HashVerification 14 0.00280521
+InferenceTest.EmptyHashAllowsInsecure 14 0.00224254
+SensorTest.Lifecycle 14 0.00792735
+SensorTest.MetricsCollectionGracefulFailure 14 0.000733243
+PipelineTest.FullFlow 11 0.0054081
+BenchmarkTest.TagDatabaseLatency 4 0.00700238
+BenchmarkTest.ControlLoopZeroAllocation 4 0.00788785
+---

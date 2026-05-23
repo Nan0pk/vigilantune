@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Victus\build\CMakeFiles\d570024bed05a6ac954ac00ba40f95da\INSTALL_force.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{902ED59E-7CB4-366D-9D60-13D76F8D4DEA}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

@@ -218,6 +218,7 @@ int main() {
 
     std::string exe_dir = get_executable_directory();
     std::string config_path = exe_dir.empty() ? "nanoloop_config.ini" : (exe_dir + "\\nanoloop_config.ini");
+    nanoloop::config::CONFIG_FILE_PATH = config_path;
 
     std::string log_file_path = exe_dir.empty() ? "nanoloop_agent.log" : (exe_dir + "\\nanoloop_agent.log");
     nanoloop::log::LoggerState::instance().initFile(log_file_path);

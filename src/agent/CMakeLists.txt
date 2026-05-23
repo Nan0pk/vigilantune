@@ -22,6 +22,7 @@ add_library(agent_core STATIC
     controller.cpp 
     governor.cpp
     inference.cpp
+    gpu_telemetry.cpp
 )
 target_link_libraries(agent_core PUBLIC shared)
 target_link_libraries(agent_core PRIVATE User32.lib PowrProf.lib Pdh.lib bcrypt.lib)

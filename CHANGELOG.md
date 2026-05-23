@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0-gpu] - 2026-05-23
+
+### Added
+- **Intel iGPU Telemetry**: Detects Intel UHD, Iris, and Arc GPUs via DXGI adapter enumeration (vendor ID `0x8086`) and D3DKMT from `gdi32.dll`. No third-party dependencies required.
+- **Tri-Vendor GPU Fallback Chain**: NVIDIA (NVML) → AMD (ADL) → Intel (D3DKMT) → Shared-Heatpipe Extrapolation.
+- **Shared-Heatpipe Thermal Extrapolation**: When direct GPU temperature sensors are unavailable (common on laptops), the system cross-extrapolates from CPU and SSD temperatures using a shared-cooling-solution model.
+- **Cross-Sensor Extrapolation**: If CPU temp is missing, it's inferred from GPU or SSD. If SSD is hotter than both CPU and GPU, the system thermal baseline is raised accordingly.
+- **`GpuTelemetryLoader::get_vendor_name()`**: New API to query the active GPU vendor at runtime.
+
+### Changed
+- **Documentation**: Removed all residual "nanoloop" references from README.md. Updated copyright to "VigilanTune Contributors". Added Intel iGPU and thermal extrapolation docs.
+
 ## [0.4.0-ecu] - 2026-05-23
 
 ### Added

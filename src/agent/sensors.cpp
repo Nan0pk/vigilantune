@@ -234,9 +234,50 @@ namespace vigilantune {
             double net_throughput = get_network_throughput();
             m_db.set(TagID::Network_Throughput, net_throughput);
 
-            // Fetch and set GPU temp from thermal zones if available
+            // ── Shared-Heatpipe Thermal Extrapolation Model ──
+            // On laptops, CPU/GPU/SSD often share the same heatpipe and fan assembly.
+            // If a direct temperature sensor is unavailable for one component, we
+            // extrapolate from whichever sensor IS reporting, because in a shared
+            // thermal solution all components trend together.
+
             double cpu_temp = m_db.get(TagID::Thermal_Headroom);
-            m_db.set(TagID::GPU_Temperature, std::clamp(cpu_temp - 5.0, 0.0, 100.0));
+            GpuMetrics gpu_metrics = m_gpu_loader.get_metrics();
+            double gpu_temp = 0.0;
+
+            if (gpu_metrics.is_valid && gpu_metrics.temperature_c > 0.0) {
+                // ── Path A: Direct GPU temp available (NVML / ADL) ──
+                gpu_temp = gpu_metrics.temperature_c;
+                m_db.set(TagID::GPU_Temperature, gpu_temp);
+            } else if (cpu_temp > 0.0) {
+                // ── Path B: Only CPU temp available → extrapolate GPU ≈ CPU ──
+                // Shared heatpipe: GPU die is typically within ±5°C of CPU on laptops
+                gpu_temp = cpu_temp;
+                m_db.set(TagID::GPU_Temperature, std::clamp(gpu_temp, 0.0, 120.0));
+                LOG_DEBUG("Sensors", "GPU temp extrapolated from CPU temp: " << gpu_temp << "°C");
+            } else if (disk_temp > 0.0) {
+                // ── Path C: Only SSD/HDD temp available → assume system is hot ──
+                // If the drive is warm, the chassis is warm — assume CPU & GPU similar
+                gpu_temp = disk_temp;
+                m_db.set(TagID::GPU_Temperature, std::clamp(gpu_temp, 0.0, 120.0));
+                LOG_DEBUG("Sensors", "GPU temp extrapolated from disk temp: " << gpu_temp << "°C");
+            } else {
+                // ── Path D: No thermal data at all — use safe assumption ──
+                m_db.set(TagID::GPU_Temperature, 0.0);
+            }
+
+            // ── Cross-Extrapolation: fill missing CPU temp from GPU or disk ──
+            if (cpu_temp <= 0.0) {
+                double best_known = std::max(gpu_temp, disk_temp);
+                if (best_known > 0.0) {
+                    m_db.set(TagID::Thermal_Headroom, std::clamp(best_known, 0.0, 120.0));
+                    LOG_DEBUG("Sensors", "CPU temp extrapolated from best known sensor: " << best_known << "°C");
+                }
+            } else if (disk_temp > cpu_temp && disk_temp > gpu_temp && disk_temp > 50.0) {
+                // SSD running hotter than both CPU and GPU readings — chassis is hot,
+                // bump the system thermal baseline up to the disk temp
+                m_db.set(TagID::Thermal_Headroom, std::clamp(disk_temp, 0.0, 120.0));
+                LOG_DEBUG("Sensors", "System thermal baseline raised to disk temp: " << disk_temp << "°C");
+            }
 
             for (int i = 0; i < 50 && m_running; ++i) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
