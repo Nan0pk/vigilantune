@@ -1,6 +1,6 @@
 # 🛡️ VigilanTune Power Agent
 
-[![Build & Test](https://github.com/geminipro123pakistan-ctrl/nanoloop/actions/workflows/build.yml/badge.svg)](https://github.com/geminipro123pakistan-ctrl/nanoloop/actions/workflows/build.yml)
+[![Build & Test](https://github.com/geminipro123pakistan-ctrl/vigilantune/actions/workflows/build.yml/badge.svg)](https://github.com/geminipro123pakistan-ctrl/vigilantune/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows-blue.svg)](https://microsoft.com/windows)
 
