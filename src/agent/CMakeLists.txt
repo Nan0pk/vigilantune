@@ -25,7 +25,7 @@ add_library(agent_core STATIC
     gpu_telemetry.cpp
 )
 target_link_libraries(agent_core PUBLIC shared)
-target_link_libraries(agent_core PRIVATE User32.lib PowrProf.lib Pdh.lib bcrypt.lib)
+target_link_libraries(agent_core PRIVATE User32.lib PowrProf.lib Pdh.lib bcrypt.lib dxgi.lib)
 
 if(NOT HAS_ONNX)
     message(WARNING "ONNX Runtime not found. AI Inference will be disabled in the build.")
