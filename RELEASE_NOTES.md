@@ -34,4 +34,4 @@ This is a **Beta-stage developer preview**. nanoloop interacts with low-level Wi
 - [Optional] ONNX Runtime
 
 ---
-**Full Changelog**: [v0.2.0-beta...v0.3.0-beta](https://github.com/geminipro123pakistan-ctrl/nanoloop/compare/main)
+**Full Changelog**: [v0.2.0-beta...v0.3.0-beta](https://github.com/Nan0pk/vigilantune/compare/main)
