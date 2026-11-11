@@ -1,5 +1,9 @@
 # 🛡️ VigilanTune - Windows Optimizer
 
+> **Status: pre-alpha.** This build does not yet change power settings, and the
+> claims below describe the goal, not the current state. The plan to 1.0 is in
+> [`docs/PLAN.md`](docs/PLAN.md).
+
 [![Build & Test](https://github.com/geminipro123pakistan-ctrl/nanoloop/actions/workflows/build.yml/badge.svg)](https://github.com/geminipro123pakistan-ctrl/nanoloop/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows-blue.svg)](https://microsoft.com/windows)
