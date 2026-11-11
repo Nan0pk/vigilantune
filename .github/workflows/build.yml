@@ -13,13 +13,42 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Configure CMake
-        run: cmake -B build -DNANOLOOP_DISABLE_AI=ON
+        run: cmake -B build -A x64 -DNANOLOOP_DISABLE_AI=ON
 
       - name: Build
-        run: cmake --build build
+        run: cmake --build build --config Release
+
+      - name: Record power plans before tests
+        shell: pwsh
+        run: powercfg /list | Out-File plans-before.txt
 
       - name: Test
-        run: ctest --test-dir build --output-on-failure
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      # Tests must never create, delete or switch a Windows power plan.
+      - name: Check tests left power plans untouched
+        shell: pwsh
+        run: |
+          powercfg /list | Out-File plans-after.txt
+          $before = (Get-FileHash plans-before.txt).Hash
+          $after = (Get-FileHash plans-after.txt).Hash
+          if ($before -ne $after) {
+            Write-Host "::error::Tests changed the Windows power plans."
+            Write-Host "--- before"; Get-Content plans-before.txt
+            Write-Host "--- after"; Get-Content plans-after.txt
+            exit 1
+          }
+          Write-Host "Power plans unchanged:"
+          Get-Content plans-after.txt
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: vigilantune-release-x64
+          path: |
+            build/src/agent/Release/agent.exe
+            build/src/watchdog/Release/watchdog.exe
+          if-no-files-found: error
 
   format-check:
     runs-on: ubuntu-latest
