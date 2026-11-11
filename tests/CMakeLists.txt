@@ -15,6 +15,7 @@ include(GoogleTest)
 add_executable(vigilantune_tests
   main.cpp
   test_database.cpp
+  test_config.cpp
   test_controller.cpp
   test_heartbeat.cpp
   test_inference.cpp
