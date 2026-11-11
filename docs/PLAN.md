@@ -51,8 +51,8 @@ Update your task's row in the same PR that does the work. Status is one of
 | T0.4 | CI: Release build, pinned googletest, plan-list check | done | #2 |
 | T0.5 | Format pass | done | #2 |
 | T0.6 | One name everywhere | done | #3 |
-| T0.7 | Remove stale data; safe uninstall matching | in review | #4 |
-| **Gate 0** | Clean base | closed | |
+| T0.7 | Remove stale data; safe uninstall matching | done | #4 |
+| **Gate 0** | Clean base | passed | |
 | T1.1 | Power backend interface and fake | todo | |
 | T1.2 | Settings from SDK symbols, checked in CI | todo | |
 | T1.3 | Own one plan | todo | |
@@ -314,6 +314,8 @@ The `vigilantune` branch stays unmerged.
 
 **Gate 0:** on `main`, the Release x64 build, tests and format jobs are green,
 the plan-list check passes, and the name search is clean.
+
+Passed on `main` at `d2ba4d0`: [Windows CI](https://github.com/Nan0pk/vigilantune/actions/runs/43084928111) passed all 16 tests and left the plan list unchanged; the format job passed. The name search contains only the T0.6 exceptions.
 
 ## Phase 1: correct and safe actuation
 
