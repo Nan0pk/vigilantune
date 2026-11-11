@@ -46,10 +46,10 @@ Update your task's row in the same PR that does the work. Status is one of
 | ID | Task | Status | PR |
 | --- | --- | --- | --- |
 | T0.1 | Agent docs and README banner | in review | #1 |
-| T0.2 | Fix the compile error | todo | |
-| T0.3 | Park host-changing tests and timing benchmarks | todo | |
-| T0.4 | CI: Release build, pinned googletest, plan-list check | todo | |
-| T0.5 | Format pass | todo | |
+| T0.2 | Fix the two build errors | in review | #2 |
+| T0.3 | Park host-changing tests and timing benchmarks | in review | #2 |
+| T0.4 | CI: Release build, pinned googletest, plan-list check | in review | #2 |
+| T0.5 | Format pass | in review | #2 |
 | T0.6 | One name everywhere | todo | |
 | T0.7 | Remove stale data; safe uninstall matching | todo | |
 | **Gate 0** | Clean base | closed | |
@@ -118,6 +118,7 @@ Update your task's row in the same PR that does the work. Status is one of
 | Hangs during start-up are never detected; tick 0 counts as alive | `heartbeat.hpp` 87, `agent/main.cpp` 87 |
 | Tests create and activate a real power plan | `tests/test_actuator.cpp`, `test_pipeline.cpp` |
 | CI builds Debug and pulls googletest from a moving `main.zip`; uninstall kills any process named `agent` | `build.yml`, `tests/CMakeLists.txt`, `uninstall.ps1` 15 |
+| The agent and watchdog fail to link: `mt.exe` error c1010001. The linker adds its own `asInvoker` UAC entry, which clashes with `requireAdministrator` in the manifests. Hidden behind the compile error until CI got that far. | CI log of PR #1; both `.manifest` files |
 
 ### Do not act on these claims from the earlier analysis
 
@@ -131,7 +132,7 @@ Update your task's row in the same PR that does the work. Status is one of
 | Run it as a Windows service | A service runs in session 0 and cannot see the user's foreground window | Per-user app started at logon (T5.1). |
 | A `min > max` interval causes a busy-spin | It only inverts the cadence; a spin needs a value of 0 or less | Validation is still required (T2.6). |
 
-Not checked: the CI status on `main`. It does not change the plan.
+CI on `main` failed on each of its last five runs, 20 to 23 May 2026, on both the build and format jobs.
 
 ### The `vigilantune` branch: keep, fix, drop
 
@@ -299,12 +300,15 @@ instructions. Changes no behaviour.
 | ID | Do | Files | Done when |
 | --- | --- | --- | --- |
 | T0.1 | Add `docs/PLAN.md`, `AGENTS.md`, and `GEMINI.md` and `CLAUDE.md` pointing to it. Put a pre-alpha banner at the top of the README. | new files, `README.md` | Files exist on `main`; banner visible |
-| T0.2 | Fix the compile error. Enclose everything from the two `std::vector` declarations to just before `cleanup:` in one `{ }` block. Change nothing else. | `src/agent/inference.cpp` | `cmake -B build -A x64 -DNANOLOOP_DISABLE_AI=ON` then `cmake --build build --config Release` succeed in CI |
-| T0.3 | Move `test_actuator.cpp` and `test_pipeline.cpp` into a second test program that CI does not run. Give the timing tests in `test_benchmark.cpp` the ctest label `benchmark` and exclude that label by default. | `tests/CMakeLists.txt` | `ctest -C Release` runs neither group |
-| T0.4 | CI: build with `--config Release`; run `ctest -C Release --output-on-failure`; pin googletest to a release tag with `URL_HASH SHA256=`; save `powercfg /list` before and after the tests and fail if they differ; upload the binaries as an artifact. | `.github/workflows/build.yml`, `tests/CMakeLists.txt` | Build and test jobs green; the plan-list check passes |
-| T0.5 | Run `clang-format-17` over `src` and `tests`. Formatting only. | `src/**`, `tests/**` | Format job green; the diff has no logic changes |
+| T0.2 | Fix the two build errors. (a) Enclose everything from the two `std::vector` declarations to just before `cleanup:` in one `{ }` block. (b) Link the agent and watchdog with `/MANIFESTUAC:NO` so the manifest file is the only source of the UAC level. Change nothing else. | `src/agent/inference.cpp`, `src/agent/CMakeLists.txt`, `src/watchdog/CMakeLists.txt` | `cmake -B build -A x64 -DNANOLOOP_DISABLE_AI=ON` then `cmake --build build --config Release` succeed in CI |
+| T0.3 | Move `test_actuator.cpp` and `test_pipeline.cpp` into `nanoloop_host_tests`, built but never registered with ctest. Move `test_benchmark.cpp` into `nanoloop_benchmarks`, registered only with `-DNANOLOOP_BENCHMARK_TESTS=ON` under the ctest label `benchmark`. | `tests/CMakeLists.txt` | `ctest -C Release` runs neither group |
+| T0.4 | CI: build with `--config Release`; run `ctest -C Release --output-on-failure`; pin googletest to a release by full commit SHA; save `powercfg /list` before and after the tests and fail if they differ; upload the binaries as an artifact. | `.github/workflows/build.yml`, `tests/CMakeLists.txt` | Build and test jobs green; the plan-list check passes |
+| T0.5 | Run `clang-format-17` over `src` and `tests`. Formatting only. | `src/**`, `tests/**` | Format job green; a token comparison before and after shows no logic changes |
 | T0.6 | One name. Namespace `vigilantune`; programs `VigilanTune.Agent.exe` and `VigilanTune.Watchdog.exe`; config `vigilantune.ini`; plan name "VigilanTune"; README badge and links point to `Nan0pk/vigilantune`. Keep the text "Nanoloop AI Optimized" in one place only: a list of legacy plan names to clean up. | all source, CMake, scripts, README | `git grep -i -E "nanoloop\|powerwatcher\|wspa"` shows only that list, the changelog and this plan; CI green |
 | T0.7 | Delete `models/telemetry_log.csv` and ignore it in `.gitignore`. In `uninstall.ps1`, stop processes by full path inside the install folder, never by the name `agent`. | `models/`, `.gitignore`, `scripts/uninstall.ps1` | File gone; script matches on path |
+
+T0.2 to T0.5 land in one PR. CI cannot be green until all four are in, and
+"done" requires green CI, so they cannot land one at a time.
 
 The `vigilantune` branch stays unmerged.
 

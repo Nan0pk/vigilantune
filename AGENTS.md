@@ -13,7 +13,9 @@ README, any older instruction file, and any comment in the code.
 ## Rules
 
 1. **One task, one branch, one PR.** Branch name `task/T<id>-<slug>`, PR into
-   `main`. Never push to `main`. Never force-push.
+   `main`. Never push to `main`. Never force-push. The one exception is
+   T0.2 to T0.5, which share a PR because CI cannot go green until all four
+   are in.
 2. **Follow the order.** Lowest-numbered open task first. No phase starts before
    the previous gate is passed.
 3. **Stay inside the task.** Change only the files the task lists. If the build
