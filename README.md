@@ -141,10 +141,12 @@ For development, start the watchdog to monitor the agent process:
 
 The pre-alpha cleanup script stops verified VigilanTune executables inside this
 installation. It leaves power plans and telemetry untouched, and does not yet
-restore process settings or the original power plan.
+restore process settings or the original power plan. Run PowerShell as an
+administrator if the agent and watchdog are elevated; cleanup reports failure
+when it cannot verify or stop a matching process.
 
 ```powershell
-PowerShell.exe -NoProfile -File .\scripts\uninstall.ps1
+PowerShell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\uninstall.ps1
 ```
 
 ---
