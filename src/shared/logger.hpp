@@ -26,57 +26,69 @@ namespace nanoloop::log {
 
     // ── Log Levels ──────────────────────────────────────────────────────
     enum class Level : int {
-        TRACE     = 0,
-        DEBUG     = 1,
-        INFO      = 2,
-        WARN      = 3,
-        ERROR_LVL = 4,   // Avoids collision with Windows ERROR macro
-        FATAL     = 5
+        TRACE = 0,
+        DEBUG = 1,
+        INFO = 2,
+        WARN = 3,
+        ERROR_LVL = 4, // Avoids collision with Windows ERROR macro
+        FATAL = 5
     };
 
     // Compile-time minimum log level (override with -DNANOLOOP_LOG_LEVEL=N)
 #ifndef NANOLOOP_LOG_LEVEL
-#define NANOLOOP_LOG_LEVEL 2  // Default: INFO
+#define NANOLOOP_LOG_LEVEL 2 // Default: INFO
 #endif
 
     // ── Helpers ─────────────────────────────────────────────────────────
-    inline const char* levelToString(Level lvl) noexcept {
+    inline const char *levelToString(Level lvl) noexcept {
         switch (lvl) {
-            case Level::TRACE:     return "TRACE";
-            case Level::DEBUG:     return "DEBUG";
-            case Level::INFO:      return "INFO ";
-            case Level::WARN:      return "WARN ";
-            case Level::ERROR_LVL: return "ERROR";
-            case Level::FATAL:     return "FATAL";
+        case Level::TRACE:
+            return "TRACE";
+        case Level::DEBUG:
+            return "DEBUG";
+        case Level::INFO:
+            return "INFO ";
+        case Level::WARN:
+            return "WARN ";
+        case Level::ERROR_LVL:
+            return "ERROR";
+        case Level::FATAL:
+            return "FATAL";
         }
         return "?????";
     }
 
     inline WORD levelToColor(Level lvl) noexcept {
         switch (lvl) {
-            case Level::TRACE:     return FOREGROUND_INTENSITY;                                          // Dark grey
-            case Level::DEBUG:     return FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY;     // Cyan
-            case Level::INFO:      return FOREGROUND_GREEN | FOREGROUND_INTENSITY;                       // Green
-            case Level::WARN:      return FOREGROUND_RED   | FOREGROUND_GREEN | FOREGROUND_INTENSITY;    // Yellow
-            case Level::ERROR_LVL: return FOREGROUND_RED   | FOREGROUND_INTENSITY;                       // Red
-            case Level::FATAL:     return FOREGROUND_RED   | FOREGROUND_BLUE  | FOREGROUND_INTENSITY;    // Magenta
+        case Level::TRACE:
+            return FOREGROUND_INTENSITY; // Dark grey
+        case Level::DEBUG:
+            return FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY; // Cyan
+        case Level::INFO:
+            return FOREGROUND_GREEN | FOREGROUND_INTENSITY; // Green
+        case Level::WARN:
+            return FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY; // Yellow
+        case Level::ERROR_LVL:
+            return FOREGROUND_RED | FOREGROUND_INTENSITY; // Red
+        case Level::FATAL:
+            return FOREGROUND_RED | FOREGROUND_BLUE | FOREGROUND_INTENSITY; // Magenta
         }
         return FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE;
     }
 
     // ── Singleton Logger State ──────────────────────────────────────────
     struct LoggerState {
-        std::mutex              mtx;
+        std::mutex mtx;
         std::unique_ptr<std::ofstream> fileStream;
-        Level                   runtimeLevel = static_cast<Level>(NANOLOOP_LOG_LEVEL);
+        Level runtimeLevel = static_cast<Level>(NANOLOOP_LOG_LEVEL);
 
-        static LoggerState& instance() {
+        static LoggerState &instance() {
             static LoggerState s;
             return s;
         }
 
         // Optional: open a log file for mirrored output
-        void initFile(const std::string& path) {
+        void initFile(const std::string &path) {
             std::lock_guard<std::mutex> lock(mtx);
             fileStream = std::make_unique<std::ofstream>(path, std::ios::app);
         }
@@ -91,9 +103,9 @@ namespace nanoloop::log {
     // ── Timestamp ───────────────────────────────────────────────────────
     inline std::string timestamp() {
         using namespace std::chrono;
-        auto now  = system_clock::now();
-        auto tt   = system_clock::to_time_t(now);
-        std::tm   tm_buf{};
+        auto now = system_clock::now();
+        auto tt = system_clock::to_time_t(now);
+        std::tm tm_buf{};
         localtime_s(&tm_buf, &tt);
 
         std::ostringstream oss;
@@ -103,48 +115,43 @@ namespace nanoloop::log {
 
     // ── LogStream (RAII – flushes message on destruction) ───────────────
     class LogStream {
-    public:
-        LogStream(Level lvl, const char* component)
-            : m_level(lvl), m_component(component), m_active(true) {}
+      public:
+        LogStream(Level lvl, const char *component) : m_level(lvl), m_component(component), m_active(true) {}
 
         // Move-only
-        LogStream(LogStream&& o) noexcept
-            : m_level(o.m_level)
-            , m_component(o.m_component)
-            , m_ss(std::move(o.m_ss))
-            , m_active(o.m_active) {
+        LogStream(LogStream &&o) noexcept
+            : m_level(o.m_level), m_component(o.m_component), m_ss(std::move(o.m_ss)), m_active(o.m_active) {
             o.m_active = false;
         }
 
-        LogStream(const LogStream&)            = delete;
-        LogStream& operator=(const LogStream&) = delete;
-        LogStream& operator=(LogStream&&)      = delete;
+        LogStream(const LogStream &) = delete;
+        LogStream &operator=(const LogStream &) = delete;
+        LogStream &operator=(LogStream &&) = delete;
 
         ~LogStream() {
-            if (!m_active) return;
+            if (!m_active)
+                return;
             flush();
         }
 
-        template<typename T>
-        LogStream& operator<<(const T& val) {
+        template <typename T> LogStream &operator<<(const T &val) {
             m_ss << val;
             return *this;
         }
 
-    private:
+      private:
         void flush() {
-            auto& state = LoggerState::instance();
+            auto &state = LoggerState::instance();
             std::lock_guard<std::mutex> lock(state.mtx);
 
             // Build formatted line: [timestamp] [LEVEL] [Component] message
-            std::string ts  = timestamp();
+            std::string ts = timestamp();
             std::string msg = m_ss.str();
 
             std::ostringstream line;
             line << "[" << ts << "] "
                  << "[" << levelToString(m_level) << "] "
-                 << "[" << m_component << "] "
-                 << msg;
+                 << "[" << m_component << "] " << msg;
 
             std::string formatted = line.str();
 
@@ -166,14 +173,14 @@ namespace nanoloop::log {
             }
         }
 
-        Level              m_level;
-        const char*        m_component;
+        Level m_level;
+        const char *m_component;
         std::ostringstream m_ss;
-        bool               m_active;
+        bool m_active;
     };
 
     // ── Factory ─────────────────────────────────────────────────────────
-    inline LogStream log(Level lvl, const char* component) {
+    inline LogStream log(Level lvl, const char *component) {
         return LogStream(lvl, component);
     }
 
@@ -183,12 +190,12 @@ namespace nanoloop::log {
 // Each macro is compiled away if the level is below the compile-time minimum.
 // Usage:  LOG_INFO("MyComponent", "value = " << 42);
 
-#define NANOLOOP_LOG_IMPL(lvl, comp, msg)                                   \
-    do {                                                                     \
-        auto& nanoloop_log_state_ = ::nanoloop::log::LoggerState::instance(); \
-        if (static_cast<int>(lvl) >= static_cast<int>(nanoloop_log_state_.runtimeLevel)) { \
-            ::nanoloop::log::LogStream(lvl, comp) << msg;                   \
-        }                                                                    \
+#define NANOLOOP_LOG_IMPL(lvl, comp, msg)                                                                              \
+    do {                                                                                                               \
+        auto &nanoloop_log_state_ = ::nanoloop::log::LoggerState::instance();                                          \
+        if (static_cast<int>(lvl) >= static_cast<int>(nanoloop_log_state_.runtimeLevel)) {                             \
+            ::nanoloop::log::LogStream(lvl, comp) << msg;                                                              \
+        }                                                                                                              \
     } while (0)
 
 #if NANOLOOP_LOG_LEVEL <= 0
@@ -204,15 +211,15 @@ namespace nanoloop::log {
 #endif
 
 #if NANOLOOP_LOG_LEVEL <= 2
-#define LOG_INFO(comp, msg)  NANOLOOP_LOG_IMPL(::nanoloop::log::Level::INFO, comp, msg)
+#define LOG_INFO(comp, msg) NANOLOOP_LOG_IMPL(::nanoloop::log::Level::INFO, comp, msg)
 #else
-#define LOG_INFO(comp, msg)  ((void)0)
+#define LOG_INFO(comp, msg) ((void)0)
 #endif
 
 #if NANOLOOP_LOG_LEVEL <= 3
-#define LOG_WARN(comp, msg)  NANOLOOP_LOG_IMPL(::nanoloop::log::Level::WARN, comp, msg)
+#define LOG_WARN(comp, msg) NANOLOOP_LOG_IMPL(::nanoloop::log::Level::WARN, comp, msg)
 #else
-#define LOG_WARN(comp, msg)  ((void)0)
+#define LOG_WARN(comp, msg) ((void)0)
 #endif
 
 #if NANOLOOP_LOG_LEVEL <= 4

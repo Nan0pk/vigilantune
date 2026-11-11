@@ -15,8 +15,8 @@
 
 using namespace nanoloop;
 
-bool StartAgent(const std::string& path, PROCESS_INFORMATION& pi) {
-    STARTUPINFOA si = { sizeof(si) };
+bool StartAgent(const std::string &path, PROCESS_INFORMATION &pi) {
+    STARTUPINFOA si = {sizeof(si)};
     if (CreateProcessA(path.c_str(), NULL, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
         return true;
     }
@@ -34,11 +34,12 @@ std::string get_executable_directory() {
     return "";
 }
 
-void monitor_heartbeat(HANDLE hProcess, DWORD pid, std::atomic<bool>& active) {
+void monitor_heartbeat(HANDLE hProcess, DWORD pid, std::atomic<bool> &active) {
     HeartbeatReader reader;
     // Wait up to 3 seconds for the agent's heartbeat section to initialize
     for (int i = 0; i < 30; ++i) {
-        if (reader.valid()) break;
+        if (reader.valid())
+            break;
         Sleep(100);
     }
 
@@ -48,7 +49,7 @@ void monitor_heartbeat(HANDLE hProcess, DWORD pid, std::atomic<bool>& active) {
     }
 
     LOG_INFO("Watchdog", "Heartbeat monitoring started for Agent PID " << pid);
-    
+
     ULONGLONG last_tick = GetTickCount64();
     ULONGLONG cooldown_until = 0;
 
@@ -58,7 +59,10 @@ void monitor_heartbeat(HANDLE hProcess, DWORD pid, std::atomic<bool>& active) {
         last_tick = current_tick;
 
         if (elapsed > 3000) {
-            LOG_WARN("Watchdog", "Significant loop delay detected (" << elapsed << " ms). Assuming system resume from sleep/suspend. Triggering 2-second cooldown.");
+            LOG_WARN("Watchdog",
+                     "Significant loop delay detected ("
+                         << elapsed
+                         << " ms). Assuming system resume from sleep/suspend. Triggering 2-second cooldown.");
             cooldown_until = current_tick + 2000;
         }
 
@@ -84,7 +88,7 @@ void monitor_heartbeat(HANDLE hProcess, DWORD pid, std::atomic<bool>& active) {
     LOG_INFO("Watchdog", "Heartbeat monitoring stopped.");
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
     // Setup mirror file logging next to watchdog executable
     std::string exe_dir = get_executable_directory();
     std::string log_file_path = exe_dir.empty() ? "nanoloop_watchdog.log" : (exe_dir + "\\nanoloop_watchdog.log");
@@ -114,16 +118,22 @@ int main(int argc, char* argv[]) {
     }
     log::Level level = log::Level::INFO;
     std::transform(log_level.begin(), log_level.end(), log_level.begin(), ::toupper);
-    if (log_level == "TRACE") level = log::Level::TRACE;
-    else if (log_level == "DEBUG") level = log::Level::DEBUG;
-    else if (log_level == "INFO") level = log::Level::INFO;
-    else if (log_level == "WARN") level = log::Level::WARN;
-    else if (log_level == "ERROR") level = log::Level::ERROR_LVL;
-    else if (log_level == "FATAL") level = log::Level::FATAL;
+    if (log_level == "TRACE")
+        level = log::Level::TRACE;
+    else if (log_level == "DEBUG")
+        level = log::Level::DEBUG;
+    else if (log_level == "INFO")
+        level = log::Level::INFO;
+    else if (log_level == "WARN")
+        level = log::Level::WARN;
+    else if (log_level == "ERROR")
+        level = log::Level::ERROR_LVL;
+    else if (log_level == "FATAL")
+        level = log::Level::FATAL;
     log::LoggerState::instance().setLevel(level);
 
     while (recoveryCount <= maxRecoveries) {
-        PROCESS_INFORMATION pi = { 0 };
+        PROCESS_INFORMATION pi = {0};
         if (!StartAgent(agentPath, pi)) {
             LOG_ERROR("Watchdog", "Failed to start agent at: " << agentPath << " (Error: " << GetLastError() << ")");
             return 1;
@@ -133,7 +143,7 @@ int main(int argc, char* argv[]) {
         ScopedHandle hThread(pi.hThread);
 
         LOG_INFO("Watchdog", "Agent started (PID: " << pi.dwProcessId << "). Monitoring...");
-        
+
         std::atomic<bool> monitor_active(true);
         std::thread heartbeat_thread(monitor_heartbeat, hProcess.get(), pi.dwProcessId, std::ref(monitor_active));
 
@@ -154,10 +164,11 @@ int main(int argc, char* argv[]) {
         }
 
         recoveryCount++;
-        
-        LOG_ERROR("Watchdog", "Agent CRASHED/HANG (Exit Code: 0x" << std::hex << exitCode << std::dec 
-                  << "). Recovery attempt " << recoveryCount << "/" << maxRecoveries << "...");
-        
+
+        LOG_ERROR("Watchdog", "Agent CRASHED/HANG (Exit Code: 0x" << std::hex << exitCode << std::dec
+                                                                  << "). Recovery attempt " << recoveryCount << "/"
+                                                                  << maxRecoveries << "...");
+
         // Immediate Fail-Safe Assertion: Reset system power scheme to Balanced
         if (PowerSetActiveScheme(NULL, &config::FAILSAFE_SCHEME_GUID) == ERROR_SUCCESS) {
             LOG_INFO("Watchdog", "Fail-Safe: Power Scheme reset to known-safe baseline.");
@@ -166,12 +177,13 @@ int main(int argc, char* argv[]) {
         }
 
         if (recoveryCount > maxRecoveries) {
-            LOG_FATAL("Watchdog", "Max recovery attempts reached. Terminating watchdog to prevent cyclic system instability.");
+            LOG_FATAL("Watchdog",
+                      "Max recovery attempts reached. Terminating watchdog to prevent cyclic system instability.");
             return 1;
         }
 
         // Exponential Backoff cooldown
-        int wait_seconds = (int)std::pow(2, recoveryCount); 
+        int wait_seconds = (int)std::pow(2, recoveryCount);
         LOG_INFO("Watchdog", "Cooling down for " << wait_seconds << " seconds before restart...");
         Sleep(wait_seconds * 1000);
     }

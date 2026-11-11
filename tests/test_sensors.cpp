@@ -7,7 +7,7 @@ using namespace nanoloop;
 TEST(SensorTest, Lifecycle) {
     TagDatabase db;
     SensorManager sensors(db);
-    
+
     // Test start/stop doesn't crash
     sensors.start();
     sensors.stop();
@@ -16,7 +16,7 @@ TEST(SensorTest, Lifecycle) {
 TEST(SensorTest, MetricsCollectionGracefulFailure) {
     TagDatabase db;
     SensorManager sensors(db);
-    
+
     // Even if not started, shouldn't crash
     sensors.collect_performance_metrics();
     sensors.collect_high_fidelity_metrics();

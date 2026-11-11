@@ -12,8 +12,8 @@
 
 namespace nanoloop {
     class SensorManager {
-    public:
-        SensorManager(TagDatabase& db);
+      public:
+        SensorManager(TagDatabase &db);
         ~SensorManager();
 
         void start();
@@ -23,14 +23,13 @@ namespace nanoloop {
         void collect_performance_metrics();
         void collect_high_fidelity_metrics(); // Gap #4, #8
 
-    private:
-        static void CALLBACK win_event_proc(
-            HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd,
-            LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime);
+      private:
+        static void CALLBACK win_event_proc(HWINEVENTHOOK hWinEventHook, DWORD event, HWND hwnd, LONG idObject,
+                                            LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime);
 
-        TagDatabase& m_db;
+        TagDatabase &m_db;
         ScopedWinEventHook m_hook;
-        
+
         // PDH members
         ScopedPdhQuery m_query;
         PDH_HCOUNTER m_cpu_counter;
@@ -41,16 +40,16 @@ namespace nanoloop {
 
         std::atomic<bool> m_running;
         std::atomic<int> m_active_callbacks{0};
-        static std::atomic<SensorManager*> s_instance;
+        static std::atomic<SensorManager *> s_instance;
 
         // Gap #4 Structures
         struct PROCESSOR_POWER_INFORMATION {
-            ULONG  Number;
-            ULONG  MaxMhz;
-            ULONG  CurrentMhz;
-            ULONG  MhzLimit;
-            ULONG  MaxIdleState;
-            ULONG  CurrentIdleState;
+            ULONG Number;
+            ULONG MaxMhz;
+            ULONG CurrentMhz;
+            ULONG MhzLimit;
+            ULONG MaxIdleState;
+            ULONG CurrentIdleState;
         };
     };
 } // namespace nanoloop

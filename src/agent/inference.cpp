@@ -10,17 +10,17 @@
 #pragma comment(lib, "bcrypt.lib")
 
 namespace nanoloop {
-    InferenceManager::InferenceManager(const std::wstring& model_path) 
+    InferenceManager::InferenceManager(const std::wstring &model_path)
 #ifndef NANOLOOP_DISABLE_AI
         : m_env(ORT_LOGGING_LEVEL_WARNING, "nanoloop"),
           m_memory_info(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)),
 #else
-        : 
+        :
 #endif
           m_power_request(INVALID_HANDLE_VALUE) {
-        
+
         // Gap #7: Initialize Power Request
-        REASON_CONTEXT rc = { POWER_REQUEST_CONTEXT_VERSION, POWER_REQUEST_CONTEXT_SIMPLE_STRING };
+        REASON_CONTEXT rc = {POWER_REQUEST_CONTEXT_VERSION, POWER_REQUEST_CONTEXT_SIMPLE_STRING};
         rc.Reason.SimpleReasonString = (LPWSTR)L"nanoloop AI Inference Cadence Protection";
         m_power_request.reset(PowerCreateRequest(&rc));
 
@@ -48,13 +48,13 @@ namespace nanoloop {
                 m_output_node_names_raw.push_back(name.get());
             }
 
-            m_input_node_dims = {1, 5}; 
+            m_input_node_dims = {1, 5};
 
             LOG_INFO("Inference", "ONNX Session verified and initialized.");
 #else
             LOG_INFO("Inference", "AI Disabled in build. Skipping session initialization.");
 #endif
-        } catch (const std::exception& e) {
+        } catch (const std::exception &e) {
             LOG_ERROR("Inference", "Exception: " << e.what());
         }
     }
@@ -63,13 +63,14 @@ namespace nanoloop {
         // ScopedHandle handles closure of m_power_request automatically
     }
 
-    bool InferenceManager::verify_model_hash(const std::wstring& path, const std::string& expected_hex_hash) {
+    bool InferenceManager::verify_model_hash(const std::wstring &path, const std::string &expected_hex_hash) {
         if (expected_hex_hash.empty()) {
             LOG_WARN("Inference", "WARNING: No expected hash provided. Running in insecure mode.");
             return true;
         }
 
-        ScopedHandle hFile(CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL));
+        ScopedHandle hFile(
+            CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL));
         if (!hFile) {
             LOG_ERROR("Inference", "Failed to open model file for hashing.");
             return false;
@@ -82,46 +83,57 @@ namespace nanoloop {
         DWORD cbHashObject = 0, cbData = 0, cbHash = 0;
 
         status = BCryptOpenAlgorithmProvider(&hAlg, BCRYPT_SHA256_ALGORITHM, NULL, 0);
-        if (status != 0) goto cleanup;
+        if (status != 0)
+            goto cleanup;
 
         status = BCryptGetProperty(hAlg, BCRYPT_OBJECT_LENGTH, (PBYTE)&cbHashObject, sizeof(DWORD), &cbData, 0);
-        if (status != 0) goto cleanup;
+        if (status != 0)
+            goto cleanup;
 
         status = BCryptGetProperty(hAlg, BCRYPT_HASH_LENGTH, (PBYTE)&cbHash, sizeof(DWORD), &cbData, 0);
-        if (status != 0) goto cleanup;
+        if (status != 0)
+            goto cleanup;
 
-        std::vector<BYTE> hashObject(cbHashObject);
-        std::vector<BYTE> hash(cbHash);
-        
-        status = BCryptCreateHash(hAlg, &hHash, hashObject.data(), cbHashObject, NULL, 0, 0);
-        if (status != 0) goto cleanup;
+        {
+            std::vector<BYTE> hashObject(cbHashObject);
+            std::vector<BYTE> hash(cbHash);
 
-        BYTE buffer[4096];
-        DWORD bytesRead;
-        while (ReadFile(hFile.get(), buffer, sizeof(buffer), &bytesRead, NULL) && bytesRead > 0) {
-            status = BCryptHashData(hHash, buffer, bytesRead, 0);
-            if (status != 0) goto cleanup;
-        }
+            status = BCryptCreateHash(hAlg, &hHash, hashObject.data(), cbHashObject, NULL, 0, 0);
+            if (status != 0)
+                goto cleanup;
 
-        status = BCryptFinishHash(hHash, hash.data(), cbHash, 0);
-        if (status != 0) goto cleanup;
+            BYTE buffer[4096];
+            DWORD bytesRead;
+            while (ReadFile(hFile.get(), buffer, sizeof(buffer), &bytesRead, NULL) && bytesRead > 0) {
+                status = BCryptHashData(hHash, buffer, bytesRead, 0);
+                if (status != 0)
+                    goto cleanup;
+            }
 
-        std::stringstream ss;
-        for (BYTE b : hash) ss << std::hex << std::setw(2) << std::setfill('0') << (int)b;
-        std::string actual_hash = ss.str();
+            status = BCryptFinishHash(hHash, hash.data(), cbHash, 0);
+            if (status != 0)
+                goto cleanup;
 
-        if (actual_hash == expected_hex_hash) {
-            LOG_INFO("Inference", "SHA-256 Verified: " << actual_hash.substr(0, 8) << "...");
-            success = true;
-        } else {
-            LOG_ERROR("Inference", "Hash mismatch!");
-            LOG_ERROR("Inference", "  Expected: " << expected_hex_hash);
-            LOG_ERROR("Inference", "  Actual:   " << actual_hash);
+            std::stringstream ss;
+            for (BYTE b : hash)
+                ss << std::hex << std::setw(2) << std::setfill('0') << (int)b;
+            std::string actual_hash = ss.str();
+
+            if (actual_hash == expected_hex_hash) {
+                LOG_INFO("Inference", "SHA-256 Verified: " << actual_hash.substr(0, 8) << "...");
+                success = true;
+            } else {
+                LOG_ERROR("Inference", "Hash mismatch!");
+                LOG_ERROR("Inference", "  Expected: " << expected_hex_hash);
+                LOG_ERROR("Inference", "  Actual:   " << actual_hash);
+            }
         }
 
     cleanup:
-        if (hHash) BCryptDestroyHash(hHash);
-        if (hAlg) BCryptCloseAlgorithmProvider(hAlg, 0);
+        if (hHash)
+            BCryptDestroyHash(hHash);
+        if (hAlg)
+            BCryptCloseAlgorithmProvider(hAlg, 0);
 
         if (status != 0 && !success) {
             LOG_ERROR("Inference", "BCrypt error: 0x" << std::hex << status);
@@ -132,7 +144,8 @@ namespace nanoloop {
 
     std::vector<float> InferenceManager::run_inference(std::vector<float> input_tensor_values) {
 #ifndef NANOLOOP_DISABLE_AI
-        if (!m_session) return {};
+        if (!m_session)
+            return {};
 
         try {
             // Gap #7: Protect Cadence
@@ -141,29 +154,29 @@ namespace nanoloop {
             }
 
             size_t input_tensor_size = input_tensor_values.size();
-            Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
-                m_memory_info, input_tensor_values.data(), input_tensor_size, 
-                m_input_node_dims.data(), m_input_node_dims.size());
+            Ort::Value input_tensor =
+                Ort::Value::CreateTensor<float>(m_memory_info, input_tensor_values.data(), input_tensor_size,
+                                                m_input_node_dims.data(), m_input_node_dims.size());
 
-            std::vector<const char*> input_names_c;
-            for (const auto& name : m_input_node_names_raw) input_names_c.push_back(name.c_str());
-            std::vector<const char*> output_names_c;
-            for (const auto& name : m_output_node_names_raw) output_names_c.push_back(name.c_str());
+            std::vector<const char *> input_names_c;
+            for (const auto &name : m_input_node_names_raw)
+                input_names_c.push_back(name.c_str());
+            std::vector<const char *> output_names_c;
+            for (const auto &name : m_output_node_names_raw)
+                output_names_c.push_back(name.c_str());
 
-            auto output_tensors = m_session->Run(
-                Ort::RunOptions{nullptr}, 
-                input_names_c.data(), &input_tensor, 1, 
-                output_names_c.data(), output_names_c.size());
+            auto output_tensors = m_session->Run(Ort::RunOptions{nullptr}, input_names_c.data(), &input_tensor, 1,
+                                                 output_names_c.data(), output_names_c.size());
 
             if (m_power_request) {
                 PowerClearRequest(m_power_request.get(), PowerRequestExecutionRequired);
             }
 
-            float* floatarr = output_tensors.front().GetTensorMutableData<float>();
+            float *floatarr = output_tensors.front().GetTensorMutableData<float>();
             size_t output_size = output_tensors.front().GetTensorTypeAndShapeInfo().GetElementCount();
 
             return std::vector<float>(floatarr, floatarr + output_size);
-        } catch (const Ort::Exception& e) {
+        } catch (const Ort::Exception &e) {
             if (m_power_request) {
                 PowerClearRequest(m_power_request.get(), PowerRequestExecutionRequired);
             }

@@ -44,3 +44,9 @@ add_executable(agent
     agent.manifest
 )
 target_link_libraries(agent PRIVATE agent_core)
+
+# agent.manifest sets the UAC level. Stop the linker adding its own "asInvoker"
+# entry, which clashes with it and fails the link (mt.exe error c1010001).
+if(MSVC)
+    target_link_options(agent PRIVATE "/MANIFESTUAC:NO")
+endif()
