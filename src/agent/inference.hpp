@@ -13,19 +13,19 @@
 
 namespace nanoloop {
     class InferenceManager {
-    public:
-        InferenceManager(const std::wstring& model_path);
+      public:
+        InferenceManager(const std::wstring &model_path);
         ~InferenceManager();
 
         // Runs inference on a vector of system metrics
         // Inputs: [CPU_Util, Queue_Len, Foreground_Hash, etc.]
         std::vector<float> run_inference(std::vector<float> input_tensor_values);
 
-    protected:
+      protected:
         // Security #2: SHA-256 Verification using Win32 BCrypt
-        bool verify_model_hash(const std::wstring& path, const std::string& expected_hex_hash);
+        bool verify_model_hash(const std::wstring &path, const std::string &expected_hex_hash);
 
-    private:
+      private:
 #ifndef NANOLOOP_DISABLE_AI
         Ort::Env m_env;
         std::unique_ptr<Ort::Session> m_session;

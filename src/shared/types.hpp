@@ -19,11 +19,7 @@ namespace nanoloop {
         MAX_TAGS
     };
 
-    enum class ActuatorID : size_t {
-        PerformanceBoost = 0,
-        ProcessorFloor,
-        MAX_ACTUATORS
-    };
+    enum class ActuatorID : size_t { PerformanceBoost = 0, ProcessorFloor, MAX_ACTUATORS };
 
     struct ActuationSet {
         std::array<double, static_cast<size_t>(ActuatorID::MAX_ACTUATORS)> values;
@@ -42,7 +38,8 @@ namespace nanoloop {
 
         bool empty() const {
             for (bool b : has_value) {
-                if (b) return false;
+                if (b)
+                    return false;
             }
             return true;
         }
@@ -52,9 +49,10 @@ namespace nanoloop {
         std::array<double, static_cast<size_t>(TagID::MAX_TAGS)> values;
         std::array<uint64_t, static_cast<size_t>(TagID::MAX_TAGS)> timestamps;
 
-        bool is_dirty(const TagSnapshot& other, double epsilon = 1.0) const {
+        bool is_dirty(const TagSnapshot &other, double epsilon = 1.0) const {
             for (size_t i = 0; i < values.size(); ++i) {
-                if (std::abs(values[i] - other.values[i]) > epsilon) return true;
+                if (std::abs(values[i] - other.values[i]) > epsilon)
+                    return true;
             }
             return false;
         }
@@ -63,7 +61,7 @@ namespace nanoloop {
     // Lock-Free Real-Time Tag Database (Architecture #2)
     // Pre-allocated array of atomic doubles using C++20 std::atomic<double>
     class TagDatabase {
-    public:
+      public:
         TagDatabase() {
             for (size_t i = 0; i < static_cast<size_t>(TagID::MAX_TAGS); ++i) {
                 m_values[i].store(0.0, std::memory_order_relaxed);
@@ -75,13 +73,12 @@ namespace nanoloop {
             size_t idx = static_cast<size_t>(tag);
             m_values[idx].store(value, std::memory_order_release);
             auto now = std::chrono::duration_cast<std::chrono::microseconds>(
-                std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+                           std::chrono::high_resolution_clock::now().time_since_epoch())
+                           .count();
             m_timestamps[idx].store(now, std::memory_order_release);
         }
 
-        double get(TagID tag) const {
-            return m_values[static_cast<size_t>(tag)].load(std::memory_order_acquire);
-        }
+        double get(TagID tag) const { return m_values[static_cast<size_t>(tag)].load(std::memory_order_acquire); }
 
         TagSnapshot get_snapshot() const {
             TagSnapshot snapshot;
@@ -92,8 +89,8 @@ namespace nanoloop {
             return snapshot;
         }
 
-    private:
+      private:
         std::array<std::atomic<double>, static_cast<size_t>(TagID::MAX_TAGS)> m_values;
         std::array<std::atomic<uint64_t>, static_cast<size_t>(TagID::MAX_TAGS)> m_timestamps;
     };
-}
+} // namespace nanoloop

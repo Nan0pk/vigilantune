@@ -12,11 +12,12 @@ namespace nanoloop {
     // Lightweight INI file parser — header-only, zero external dependencies.
     // Supports sections, key=value pairs, and comments (';' and '#').
     class ConfigLoader {
-    public:
+      public:
         // Load configuration from an INI file. Returns true if the file was found and parsed.
-        bool load(const std::string& filepath) {
+        bool load(const std::string &filepath) {
             std::ifstream file(filepath);
-            if (!file.is_open()) return false;
+            if (!file.is_open())
+                return false;
 
             std::string line;
             std::string current_section;
@@ -25,15 +26,16 @@ namespace nanoloop {
                 line = trim(line);
 
                 // Skip empty lines and comments
-                if (line.empty() || line[0] == ';' || line[0] == '#') continue;
+                if (line.empty() || line[0] == ';' || line[0] == '#')
+                    continue;
 
                 // Section header
                 if (line[0] == '[') {
                     auto end = line.find(']');
                     if (end != std::string::npos) {
                         current_section = line.substr(1, end - 1);
-                        std::transform(current_section.begin(), current_section.end(),
-                                       current_section.begin(), ::tolower);
+                        std::transform(current_section.begin(), current_section.end(), current_section.begin(),
+                                       ::tolower);
                     }
                     continue;
                 }
@@ -64,7 +66,7 @@ namespace nanoloop {
         bool is_loaded() const { return m_loaded; }
 
         // Get a string value with fallback default
-        std::string get_string(const std::string& key, const std::string& default_val = "") const {
+        std::string get_string(const std::string &key, const std::string &default_val = "") const {
             std::string lower_key = key;
             std::transform(lower_key.begin(), lower_key.end(), lower_key.begin(), ::tolower);
             auto it = m_values.find(lower_key);
@@ -72,35 +74,45 @@ namespace nanoloop {
         }
 
         // Get an integer value with fallback default
-        int get_int(const std::string& key, int default_val = 0) const {
+        int get_int(const std::string &key, int default_val = 0) const {
             std::string val = get_string(key);
-            if (val.empty()) return default_val;
-            try { return std::stoi(val); }
-            catch (...) { return default_val; }
+            if (val.empty())
+                return default_val;
+            try {
+                return std::stoi(val);
+            } catch (...) {
+                return default_val;
+            }
         }
 
         // Get a double value with fallback default
-        double get_double(const std::string& key, double default_val = 0.0) const {
+        double get_double(const std::string &key, double default_val = 0.0) const {
             std::string val = get_string(key);
-            if (val.empty()) return default_val;
-            try { return std::stod(val); }
-            catch (...) { return default_val; }
+            if (val.empty())
+                return default_val;
+            try {
+                return std::stod(val);
+            } catch (...) {
+                return default_val;
+            }
         }
 
         // Get a boolean value with fallback default
         // Accepts: true/false, yes/no, 1/0, on/off
-        bool get_bool(const std::string& key, bool default_val = false) const {
+        bool get_bool(const std::string &key, bool default_val = false) const {
             std::string val = get_string(key);
-            if (val.empty()) return default_val;
+            if (val.empty())
+                return default_val;
             std::transform(val.begin(), val.end(), val.begin(), ::tolower);
             return (val == "true" || val == "yes" || val == "1" || val == "on");
         }
 
         // Get a comma-separated list as a vector of strings
-        std::vector<std::string> get_list(const std::string& key) const {
+        std::vector<std::string> get_list(const std::string &key) const {
             std::vector<std::string> result;
             std::string val = get_string(key);
-            if (val.empty()) return result;
+            if (val.empty())
+                return result;
 
             std::stringstream ss(val);
             std::string item;
@@ -113,10 +125,11 @@ namespace nanoloop {
             return result;
         }
 
-    private:
-        static std::string trim(const std::string& s) {
+      private:
+        static std::string trim(const std::string &s) {
             auto start = s.find_first_not_of(" \t\r\n");
-            if (start == std::string::npos) return "";
+            if (start == std::string::npos)
+                return "";
             auto end = s.find_last_not_of(" \t\r\n");
             return s.substr(start, end - start + 1);
         }
