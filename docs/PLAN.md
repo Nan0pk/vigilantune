@@ -8,6 +8,36 @@ was run on Windows. Agents: read [`AGENTS.md`](../AGENTS.md) first.
 leaving Windows alone. If Gate 4 cannot show that, the project stops before
 packaging.
 
+## What the owner is building
+
+Read from every file on both branches, the full commit history, and the first
+commit. Agents: when a task leaves room for judgement, serve this.
+
+- **It started as a battery-drain watcher.** The first commit's
+  `monitor_power.ps1` ("PowerWatcher") logged discharge rate in mW, brightness,
+  active plan, CPU MHz and the top five CPU-using processes every minute on
+  battery, and stopped on mains. The founding question is "what is eating my
+  battery, and what should change?"
+- **It is built for a hot hybrid gaming laptop.** Commits come from an HP
+  Victus. The branch adds NVIDIA, AMD and Intel GPU temperatures, an energy
+  preference map driven by load and temperature, and battery-aware cooling.
+  Heat and throttling matter as much as battery.
+- **It should cost almost nothing while idle.** The first architecture README
+  sleeps at 0% between events, batches timers so the CPU stays in deep sleep,
+  and has the watchdog block on the agent process at zero cost. The later
+  50-500 ms loop drifted from this; Phase 2 returns to it.
+- **It should learn from real data.** The first release notes say its main
+  purpose was to collect telemetry for a model, and contributors were asked to
+  share their logs.
+- **Tuning should be a readable, editable map.** The branch's "ECU" engine
+  turns two readings into a setting through a 5x5 table the user can edit, like
+  an engine control unit. Phase 3 keeps it as the policy engine. Phase 4
+  learns which profile, and so which map, each app needs; learning that edits
+  the map cells themselves comes after 1.0 (B5).
+- **One control point for power.** The first `GEMINI.md` asks for "unified
+  software control". How far that goes next to the laptop maker's own tool is
+  decision D9.
+
 ## Status
 
 Update your task's row in the same PR that does the work. Status is one of
@@ -48,7 +78,10 @@ Update your task's row in the same PR that does the work. Status is one of
 | T3.4 | Per-app rules | todo | |
 | T3.5 | Full-screen detection | todo | |
 | T3.6 | Static runtime | todo | |
-| **Gate 3** | Old model gone, rules in | closed | |
+| T3.7 | Battery discharge-rate sensor | todo | |
+| T3.8 | Heat and throttle sensors | todo | |
+| T3.9 | Energy-preference maps (port the ECU engine) | todo | |
+| **Gate 3** | Old model gone; rules, sensors and maps in | closed | |
 | T4.1 | Benchmark harness | todo | |
 | T4.2 | Demand sampler | todo | |
 | T4.3 | Per-app memory | todo | |
@@ -75,7 +108,7 @@ Update your task's row in the same PR that does the work. Status is one of
 | Finding | Where |
 | --- | --- |
 | `main` does not compile: `goto cleanup` jumps over initialised variables | `src/agent/inference.cpp` 85-122 |
-| Max and min processor state GUIDs are invented, so tuning writes change nothing | `src/agent/actuators.cpp` 16, 18 |
+| Max and min processor state GUIDs are invented, so tuning writes fail. The branch commit `c522121` "Fix Actuator Error 2" shows them failing on hardware with error 2 (file not found); un-hiding a setting that does not exist cannot fix that. | `src/agent/actuators.cpp` 16, 18 |
 | The branch's EPP and cooling GUIDs are also wrong | branch `actuators.cpp` |
 | Writes go to whichever plan is active, including the user's own | `actuators.cpp` 95 |
 | Model exports 1 output, controller reads 2; features differ between training and runtime | `models/train.py`, `controller.cpp` 46-60 |
@@ -98,8 +131,29 @@ Update your task's row in the same PR that does the work. Status is one of
 | Run it as a Windows service | A service runs in session 0 and cannot see the user's foreground window | Per-user app started at logon (T5.1). |
 | A `min > max` interval causes a busy-spin | It only inverts the cadence; a spin needs a value of 0 or less | Validation is still required (T2.6). |
 
-Not checked: the CI status on `main`, and whether `PowerWriteACValueIndex`
-reports success for unknown GUIDs. Neither changes the plan.
+Not checked: the CI status on `main`. It does not change the plan.
+
+### The `vigilantune` branch: keep, fix, drop
+
+The branch is not merged. What is worth keeping is ported through the tasks
+named below, so nothing of value is lost.
+
+| Branch piece | Verdict | Why | Ported by |
+| --- | --- | --- | --- |
+| ECU engine: 5x5 maps with bilinear blending (`ecu_engine.hpp`), loaded from the INI | **Keep, fix** | Good, readable policy format. The cooling map's ticks run high to low, but the lookup assumes low to high, so it always returns the first cell. Ticks must be validated. | T3.9 |
+| Energy-preference map: load x temperature | **Keep the idea** | Right direction: more load gives faster settings, more heat backs off. Temperature input must be real (see heat rows). | T3.9 |
+| Battery discharge rate from `SYSTEM_BATTERY_STATE.Rate` | **Keep, fix** | This is the measured outcome learning needs. The field is a `DWORD` that must be read as a signed `LONG` ([source](https://learn.microsoft.com/hu-hu/windows/win32/api/winnt/ns-winnt-system_battery_state)); the branch casts it straight to `double`, so discharge never shows as negative. | T3.7 |
+| NVIDIA GPU temperature and power through NVML | **Keep** | A real reading on NVIDIA laptops such as the Victus. | T3.8 |
+| AMD temperature through ADL Overdrive 5 | Drop | Legacy interface; add AMD later through the current library if a tester has an AMD laptop | B9 |
+| Intel GPU through D3DKMT | Drop | `query_intel_temperature()` always returns 0, so it never reads anything | |
+| "Shared heatpipe" extrapolation | Drop | It copies the CPU reading into the GPU slot, or the disk reading into the CPU slot. Decisions must never run on made-up readings; a missing reading stays missing. | |
+| NVMe temperature, memory, network | Drop | Read but never used by a decision | |
+| Timer-resolution actuator (`NtSetTimerResolution`) | Drop | Since Windows 10 2004 a timer request no longer changes the global timer ([source](https://msdn.microsoft.com/en-us/library/windows/desktop/dd757624(v=VS.85).aspx)), so it only affects VigilanTune itself; it is also undocumented | |
+| Cooling-policy actuator | Not in 1.0 | Its GUID on the branch is wrong, and on many laptops the firmware runs the fans. Test whether it changes anything on the Victus first. | B7 |
+| UAC self-elevation | Drop | The agent restarts itself elevated and exits with code 0, so the watchdog reads a clean exit and quits, leaving the agent unwatched | T1.8 decides rights |
+| `__rdtsc()` timestamps | Drop | Changed to pass a timing benchmark; raw CPU cycles are not a time | |
+| README says `Local\VigilanTune_Heartbeat` | Wrong | Code still uses `Local\Nanoloop_Heartbeat` | T0.6 |
+| `GEMINI.md`, `.antigravitycli/`, `.gemini_pulse.json`, `agy_*.cmd`, `Testing/`, `third_party/onnxruntime` headers | Drop | Local tool files and about 10,000 lines of copied headers | |
 
 ### Missed by the earlier analysis
 
@@ -125,11 +179,12 @@ measurement shows it beats leaving Windows alone.
 
 | In 1.0 | Not in 1.0 |
 | --- | --- |
-| Three profiles: Efficiency, Balanced, Performance | The current ONNX model, or any model trained on made-up data |
-| Two levers only: energy preference (EPP) and boost mode, separate values for mains and battery | Writing Maximum or Minimum processor state, or cooling policy |
+| Three profiles: Efficiency, Balanced, Performance. In Efficiency and Performance, energy preference comes from an editable 5x5 map of load and heat (the branch's ECU engine), separately for mains and battery. | The current ONNX model, or any model trained on made-up data |
+| Two levers only: energy preference (EPP) and boost mode | Writing Maximum or Minimum processor state, cooling policy, or timer resolution |
+| Real readings only: CPU load, battery discharge rate in mW, throttling, NVIDIA GPU temperature and power when present | Invented readings such as one sensor's value copied into another |
 | Smart mode: learns each app's real demand on this machine and picks the profile, stepping up at once when an app needs speed | A model that writes raw power values; learning only ever chooses among the three profiles |
 | Switching on events: mains or battery, battery level, Energy Saver, the user's app rules, full screen, user override | A fast control loop driven by a stress score |
-| Watchfulness: an alert when a background app drains the battery, with a one-click limit | Process governor switched on by default |
+| Watchfulness: an alert when a background app drains the battery, with a one-click limit, and a daily "what drained your battery" summary | Process governor switched on by default |
 | A local record of what each choice cost in battery, kept on the machine, as training data for a later model | A shared model trained across many machines; that needs users first |
 | Tray icon showing the profile and the reason; installer, clean uninstall, start at logon | Undocumented APIs, timer-resolution changes, Windows service |
 
@@ -190,14 +245,16 @@ Do not use them in 1.0.
 ### Profiles: starting values
 
 Balanced means "leave the values the user's original plan had", so running the
-app in Balanced changes nothing. The other numbers are starting guesses, not
-measured; T4.9 tunes them.
+app in Balanced changes nothing. In Efficiency and Performance, the exact energy
+preference comes from that profile's map (T3.9) and is always clamped to the
+band below. Until T3.9 lands, use the first number of each band. The numbers
+are starting guesses, not measured; T4.9 tunes them.
 
-| Profile | EPP on mains | EPP on battery | Boost on mains | Boost on battery |
+| Profile | EPP band on mains | EPP band on battery | Boost on mains | Boost on battery |
 | --- | --- | --- | --- | --- |
-| Efficiency | higher of baseline and 60 | higher of baseline and 80 | 3 | 0 |
+| Efficiency | 60-100, never below baseline | 80-100, never below baseline | 3 | 0 |
 | Balanced | baseline | baseline | baseline | baseline |
-| Performance | 0 | lower of baseline and 25 | 2 | 2 |
+| Performance | 0-40 | 25-50, never above baseline | 2 | 2 |
 
 Order for I5: Efficiency, then Balanced, then Performance. Moving right is "a
 step toward speed".
@@ -218,6 +275,10 @@ step toward speed".
 | `SHQueryUserNotificationState` † | Reports full-screen and presentation states. |
 | `QueryUnbiasedInterruptTime` † | A clock that does not advance during sleep. Use it for heartbeat timestamps. |
 | `GetProcessTimes` † | CPU time used by a process. Use it for the drain alert. |
+| `SYSTEM_BATTERY_STATE.Rate` | Declared as `DWORD`, but must be read as a signed `LONG`: negative means discharging, in mW ([source](https://learn.microsoft.com/hu-hu/windows/win32/api/winnt/ns-winnt-system_battery_state)). |
+| `PROCESSOR_POWER_INFORMATION` | Returned per core by `CallNtPowerInformation(ProcessorInformation)`. Not in the SDK headers; declare it from Microsoft's page ([source](https://learn.microsoft.com/windows/win32/power/processor-power-information-str)). `MhzLimit` is the current limit including thermal throttling. |
+| Timer resolution | Since Windows 10 2004 a request affects only the calling process ([source](https://msdn.microsoft.com/en-us/library/windows/desktop/dd757624(v=VS.85).aspx)). Never use it as a lever. |
+| CPU temperature | Windows has no documented user-mode CPU temperature reading. Use throttling (`MhzLimit`) and NVIDIA GPU temperature instead; never install a kernel driver. |
 
 ## Phase map
 
@@ -226,7 +287,7 @@ step toward speed".
 | 0 | Clean base | CI green; tests leave power plans untouched; one name everywhere | No |
 | 1 | Correct, safe actuation | Hardware report shows values change per profile and the original plan returns on exit | Yes |
 | 2 | Reliable lifecycle | Fault tests green; kill, Energy Saver and sleep checks pass on a laptop | Yes |
-| 3 | Remove the old model, add app rules | No ONNX left; rule tests green | No |
+| 3 | Remove the old model; add app rules, real sensors and maps | No ONNX left; rule, sensor and map tests green | No |
 | 4 | Smart mode, then proof | Benchmark shows Smart mode beats Windows left on Balanced; if not, stop | Yes |
 | 5 | Package and release | The 1.0 checklist is complete | Yes |
 
@@ -377,23 +438,27 @@ stopping the app end with the user's plan restored.
 
 **Gate 2:** T2.8 is green in CI and T2.9 passes on a laptop.
 
-## Phase 3: remove the old model, add app rules
+## Phase 3: remove the old model; add rules, sensors and maps
 
 Deletes the model path, which cannot learn anything useful as built, and adds
-per-app rules and full-screen detection. Learning returns in Phase 4, built on
+per-app rules, full-screen detection, the real sensors (battery drain, heat,
+throttling) and the branch's map engine. Learning returns in Phase 4, built on
 measured outcomes instead of made-up data.
 
 | ID | Do | Files | Done when |
 | --- | --- | --- | --- |
 | T3.1 | Delete the ONNX path: `inference.*`, `models/`, the `onnxruntime` dependency in `vcpkg.json` and CMake, the `NANOLOOP_DISABLE_AI` flag, model hash and model path settings, every `PowerSetRequest` call, telemetry CSV logging and rotation, `test_inference.cpp`. Add a changelog entry. | as listed | `git grep -i -E "onnx\|inference\|model_path"` finds nothing outside the changelog and this plan; CI green |
-| T3.2 | Delete dead telemetry: stress score, dirty-flag check, the thermal, GPU, disk, frequency and timer tags, their tests, and the timing benchmarks. Delete `TagDatabase` if nothing uses it afterwards. | `sensors.*`, `controller.*`, `types.hpp`, `tests/` | No unused tag remains; CI green |
+| T3.2 | Delete dead telemetry: stress score, dirty-flag check, the thermal, GPU, disk, frequency and timer tags, their tests, and the timing benchmarks. Delete `TagDatabase` if nothing uses it afterwards. T3.7 and T3.8 bring back the readings that matter, as tested providers. | `sensors.*`, `controller.*`, `types.hpp`, `tests/` | No unused tag remains; CI green |
 | T3.3 | Identify the foreground app by executable path, not window title. From the foreground window take the process ID, then call `QueryFullProcessImageNameW`. If the path cannot be read, or the process is `ApplicationFrameHost.exe`, report "no rule". Put this behind `IForegroundProvider` with a fake. | `sensors.*`, new `foreground_provider.*` | Unit tests on the fake; `git grep GetWindowText` is empty |
 | T3.4 | Per-app rules. A `[rules]` section in the user's config: `name.exe = efficiency`, `balanced` or `performance`; a full path is also accepted. Matching ignores case; a full path beats a file name. The result fills the app-rule field from T2.1. | `config*.hpp`, `controller.*` | Tests: match by name, match by path, precedence, an invalid profile name is rejected with a warning |
 | T3.5 | Full-screen detection with `SHQueryUserNotificationState`. Query on each foreground change, and every 5 s while the answer is full screen, presentation or busy. The result fills the full-screen field from T2.1. | `sensors.*` | Unit tests through a fake |
-| T3.6 | Link the C runtime statically (`/MT`) so users need no Visual C++ redistributable. Add a CI step: `dumpbin /dependents` on both programs lists only Windows system DLLs. | CMake files, `build.yml` | CI step passes |
+| T3.6 | Link the C runtime statically (`/MT`) so users need no Visual C++ redistributable. Add a CI step: `dumpbin /dependents` on both programs lists only Windows system DLLs (NVML is loaded at run time, not linked). | CMake files, `build.yml` | CI step passes |
+| T3.7 | Battery discharge-rate sensor behind `IBatteryProvider`, with a fake. Read `SYSTEM_BATTERY_STATE` through `CallNtPowerInformation(SystemBatteryState)` once a second. Convert `Rate` with `static_cast<LONG>` before any other use: negative is discharging, in mW. Report "unknown" when no battery is present, when charging, or when the rate is 0. Keep a 60-second moving average. | new `battery.*` | Unit tests: a raw value with the high bit set reads negative; no-battery, charging and zero cases read "unknown" |
+| T3.8 | Heat and throttle sensors behind `IHeatProvider`, with a fake. (a) Throttling: read `PROCESSOR_POWER_INFORMATION` for every core through `CallNtPowerInformation(ProcessorInformation)`; throttled when any core's `MhzLimit` is below its `MaxMhz`. Declare the structure yourself; Microsoft notes it is missing from the headers. (b) NVIDIA GPU temperature and power: load `nvml.dll` by full path from the System32 folder †, never by bare name; if absent, report "unknown". (c) ACPI thermal zone: use only if its value changed at least once in the last 10 minutes; a stuck value is "unknown". (d) Heat index 0-100: 100 while throttled; otherwise the GPU temperature scaled from 60 °C (0) to 90 °C (100); "unknown" when nothing is readable. | new `heat.*`; port NVML code from branch `gpu_telemetry.cpp` | Unit tests for each source and for "unknown"; no reading is ever copied from one sensor into another |
+| T3.9 | Energy-preference maps. Port `ECUTable2D` from branch `src/agent/ecu_engine.hpp`. Validation on load: exactly 5 ticks per axis, strictly increasing; 25 cells; every cell finite and 0-100. Reject an invalid map with a warning and keep the built-in one. X axis is CPU load 0-100%; Y axis is the heat index from T3.8. When heat is "unknown", use the Y = 0 row. Four maps: `[map_efficiency_ac]`, `[map_efficiency_dc]`, `[map_performance_ac]`, `[map_performance_dc]`. Balanced has no map: it keeps the baseline. Starting cells: lift the branch's EPP map, then clamp each cell to the profile's band in the reference table. Evaluate once a second; write only when the result moves 10 points or more, and still obey I5. | new `energy_map.*`, `controller.*`, the INI | Unit tests: corners, blending between cells, out-of-range inputs, the cooling map's high-to-low ticks rejected, band clamping |
 
-**Gate 3:** the ONNX search is clean, all tests are green, and the dependency
-check passes.
+**Gate 3:** the ONNX search is clean, all tests are green, the dependency check
+passes, and the three new sensors and the maps pass their tests on the fake.
 
 ## Phase 4: smart mode, then proof
 
@@ -412,9 +477,9 @@ keeping.
 | T4.2 | Demand sampler. On each heartbeat tick, record overall CPU busy percent and whether any single core was above 90% busy. The second is "heavy" when overall CPU is 50% or more, or any core is above 90%. Use a documented counter API † behind `IDemandProvider`, with a fake. | new `demand.*` | Unit tests on the fake; I6 still holds with the sampler running |
 | T4.3 | Per-app memory. For the foreground app, by executable path, keep `seconds_observed` and `heavy_share`, a running average of "heavy" between 0 and 1. Store it in `%LOCALAPPDATA%\VigilanTune\apps.json`; save at most once every 5 minutes and on exit, by temporary file and rename. `classify(stats)` is a pure function: under 10 minutes observed gives "unknown"; `heavy_share` below 0.05 gives "light"; above 0.40 gives "heavy"; otherwise "mixed". | new `app_memory.*` | Tests for each class, the 10-minute rule, and a corrupt file being ignored safely |
 | T4.4 | Smart selection. See "T4.4 in detail". | `controller.*`, tray text | Table-driven tests for every rule; I5 holds |
-| T4.5 | Outcome record, local only. On battery, for every 5 minutes one app stays in the foreground, append a row to `outcomes.csv`: app, profile, average discharge in mW, `heavy_share`. Cap the file at 10 MB. Nothing is uploaded. | new `outcomes.*`, `PRIVACY.md` | Tests for the row format and the size cap |
+| T4.5 | Outcome record, local only. On battery, for every 5 minutes one app stays in the foreground, append a row to `outcomes.csv`: app, profile, average discharge in mW from T3.7, average heat index from T3.8, `heavy_share`. Cap the file at 10 MB. Nothing is uploaded. | new `outcomes.*`, `PRIVACY.md` | Tests for the row format and the size cap |
 | T4.6 | Try and measure, a beta that is off by default (`smart.try_and_measure`). On battery, for apps classed "mixed", run 1 in 10 five-minute periods on Efficiency. After 20 periods each way, reclassify the app as "light" if Efficiency used at least 5% less power and `heavy_share` rose by less than 0.05. | `controller.*`, `app_memory.*` | Pure-function tests on recorded periods; off by default |
-| T4.7 | Background drain alert. On battery, every 30 s, measure CPU use per process with the existing process snapshot and `GetProcessTimes` †. If a process that is not the foreground app averages over 20% of total CPU for 5 minutes, show one tray notification naming it, with three choices: Ignore once, Always ignore, Limit it. "Limit it" turns on efficiency mode for that process only. Record its process ID in `state.json` and undo the limit when it comes to the foreground, when the app exits, or after a crash. | new `watch.*`, tray | Tests on a fake process list; a limited process is always released (part of I2) |
+| T4.7 | Background drain alert. On battery, every 30 s, measure CPU use per process with the existing process snapshot and `GetProcessTimes` †. If a process that is not the foreground app averages over 20% of total CPU for 5 minutes, show one tray notification naming it, with three choices: Ignore once, Always ignore, Limit it. "Limit it" turns on efficiency mode for that process only. Record its process ID in `state.json` and undo the limit when it comes to the foreground, when the app exits, or after a crash. Also add "Today on battery" to the tray menu: the five processes with the most CPU time on battery today, each with an estimated share of the energy used (its share of CPU time times the measured discharge from T3.7), labelled "estimate". | new `watch.*`, tray | Tests on a fake process list; a limited process is always released (part of I2); the summary sums to at most 100% |
 | T4.8 NEEDS HUMAN | On battery, brightness fixed at 50%, Wi-Fi on, no other apps open. First run the "day" workload once with the app on, unmeasured, so Smart mode can learn. Then run all four workloads twice in each of three set-ups: app off with Windows power mode Balanced; app off with Windows "Best power efficiency"; app on in Smart mode. Run a third time wherever two results differ by more than 3%. Expect about nine hours across several charges. | | `bench/results.csv` and the summary pasted into the PR |
 | T4.9 | Tune. Change only the profile numbers and the T4.3 thresholds, inside the reference ranges, using T4.8. Re-run the affected rows. Two tuning rounds at most. | constants, `docs/BENCHMARKS.md` | Final numbers and results recorded |
 
@@ -487,13 +552,14 @@ need an answer before 1.0.
 | # | Decision | Default assumed | If the owner chooses otherwise |
 | --- | --- | --- | --- |
 | D1 | Product name | VigilanTune everywhere | Only the text in T0.6 changes |
-| D2 | What "smart" means in 1.0 | Remove the current ONNX model. Add on-device learning that picks among three safe profiles (Phase 4). | Keeping the ONNX model ships a part that only copies a simple rule |
+| D2 | What "smart" means in 1.0 | Remove the current ONNX model. Keep the ECU maps as the policy. Add on-device learning, trained on measured battery drain, that picks the profile and so the map for each app (Phase 4). | Keeping the ONNX model ships a part that only copies a simple rule |
 | D3 | Supported Windows | 11 22H2 or later on x64 in full; 10 22H2 for switching only | More matrix rows |
 | D4 | Process governor | Off by default. The drain alert limits one app at a time, and only on the user's click. | Backlog item B1 must land first |
 | D5 | Code-signing certificate | None yet | Without one, Windows SmartScreen warns users at install. It costs money; decide before 1.0. |
 | D6 | The Gate 4 bar | At least 5% less power than Windows left on Balanced, at most 5% slower. Failing it stops the project before packaging. | Edit the gate text |
 | D7 | Who runs the NEEDS HUMAN steps, and on which machines | The owner, on their own laptop first | Matrix rows with no machine are listed as untested in the README |
 | D8 | Licence | Stays MIT; no code copied from GPL projects such as EnergyStarX | |
+| D9 | The laptop maker's own tool (OMEN Gaming Hub on the Victus) | Coexist: when it changes the power plan, VigilanTune pauses and says so | Taking over fans or power limits is not possible through documented Windows APIs; it would mean reverse-engineering vendor interfaces per model |
 
 Owner time, roughly: 20 minutes for T1.7, 30 minutes for T2.9, nine hours on
 battery for T4.8, an hour per machine for T5.6, and 72 unattended hours for
@@ -509,8 +575,11 @@ None of these may start before the 1.0 release.
 | B2 | ARM64 validated on a Snapdragon laptop | Compile-only until then |
 | B3 | Follow the user's Windows power mode | Read it through documented notifications only |
 | B4 | Load-aware switching beyond the burst guard | Only if Phase 4 numbers justify it |
-| B5 | A shared decision model | Trained on outcome records from many machines, shared only by choice. It needs 1.0 in users' hands first. |
+| B5 | A shared decision model, and learning that edits map cells | Trained on outcome records from many machines, shared only by choice. It needs 1.0 in users' hands first. |
 | B6 | Auto-update and a winget entry | After signing is settled |
+| B7 | Cooling-policy lever | Only if T1.7-style measurements on the Victus show changing it does something |
+| B8 | Fan curves and CPU power limits | Needs vendor interfaces (see D9); the biggest heat lever on HX laptops, but outside documented Windows APIs |
+| B9 | AMD GPU temperature | Through AMD's current library, once a tester with an AMD laptop is available |
 
 ## Sources
 
@@ -528,3 +597,6 @@ None of these may start before the 1.0 release.
 - [Energy saver](https://learn.microsoft.com/en-us/windows-hardware/design/component-guidelines/energy-saver), Microsoft
 - [Processor performance boost mode and the Low Latency Profile](https://www.thewindowsclub.com/enable-processor-performance-boost-mode-in-windows), The Windows Club
 - [EnergyStar](https://github.com/imbushuo/EnergyStar) and [EnergyStarX](https://github.com/JasonWei512/EnergyStarX)
+- [timeBeginPeriod](https://msdn.microsoft.com/en-us/library/windows/desktop/dd757624(v=VS.85).aspx), Microsoft, for per-process timer resolution
+- [SYSTEM_BATTERY_STATE](https://learn.microsoft.com/hu-hu/windows/win32/api/winnt/ns-winnt-system_battery_state), Microsoft
+- [PROCESSOR_POWER_INFORMATION](https://learn.microsoft.com/windows/win32/power/processor-power-information-str), Microsoft
