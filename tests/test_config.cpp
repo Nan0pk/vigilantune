@@ -40,6 +40,9 @@ TEST_F(ConfigurationCompatibility, LoadsLegacyFileWhenNewFileIsAbsent) {
     vigilantune::ConfigLoader loader;
     ASSERT_TRUE(loader.load((directory / "vigilantune.ini").string()));
     EXPECT_EQ(loader.get_string("general.log_level"), "DEBUG");
+    EXPECT_EQ(loader.loaded_path(), directory / "nanoloop_config.ini");
+    EXPECT_TRUE(std::filesystem::exists(directory / "nanoloop_config.ini"));
+    EXPECT_FALSE(std::filesystem::exists(directory / "vigilantune.ini"));
 }
 
 TEST_F(ConfigurationCompatibility, PrefersNewFileWhenBothExist) {
@@ -55,6 +58,7 @@ TEST_F(ConfigurationCompatibility, PrefersNewFileWhenBothExist) {
     vigilantune::ConfigLoader loader;
     ASSERT_TRUE(loader.load((directory / "vigilantune.ini").string()));
     EXPECT_EQ(loader.get_string("general.log_level"), "WARN");
+    EXPECT_EQ(loader.loaded_path(), directory / "vigilantune.ini");
 }
 
 TEST_F(ConfigurationCompatibility, DoesNotUseLegacyFileForAnUnrelatedPath) {

@@ -46,7 +46,10 @@ namespace vigilantune {
 
         // Governor settings
         inline int GOVERNOR_INTERVAL_MS = 5000;
-        inline std::vector<std::string> EXCLUSION_LIST = {"csrss.exe", "dwm.exe", "explorer.exe", "svchost.exe"};
+        inline constexpr char AGENT_EXCLUSION[] = "vigilantune.agent.exe";
+        inline constexpr char WATCHDOG_EXCLUSION[] = "vigilantune.watchdog.exe";
+        inline std::vector<std::string> EXCLUSION_LIST = {"csrss.exe",   "dwm.exe",       "explorer.exe",
+                                                          "svchost.exe", AGENT_EXCLUSION, WATCHDOG_EXCLUSION};
 
         // Watchdog settings
         inline int MAX_RECOVERY_ATTEMPTS = 3;
@@ -56,10 +59,13 @@ namespace vigilantune {
         inline int MAX_ROTATED_FILES = 5;
 
         // Load config from vigilantune.ini
-        inline bool load_from_file(const std::string &filepath) {
+        inline bool load_from_file(const std::string &filepath, std::string *loaded_path = nullptr) {
             ConfigLoader loader;
             if (!loader.load(filepath)) {
                 return false;
+            }
+            if (loaded_path) {
+                *loaded_path = loader.loaded_path().string();
             }
 
             DATA_COLLECTION_MODE = loader.get_bool("general.data_collection", DATA_COLLECTION_MODE);
@@ -103,6 +109,8 @@ namespace vigilantune {
             auto list = loader.get_list("governor.exclusion_list");
             if (!list.empty()) {
                 EXCLUSION_LIST = list;
+                EXCLUSION_LIST.emplace_back(AGENT_EXCLUSION);
+                EXCLUSION_LIST.emplace_back(WATCHDOG_EXCLUSION);
             }
             GOVERNOR_INTERVAL_MS = loader.get_int("governor.governor_interval_ms", GOVERNOR_INTERVAL_MS);
 

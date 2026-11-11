@@ -186,8 +186,9 @@ int main() {
 
     LOG_INFO("Main", "--- vigilantune Power Agent ---");
 
-    if (config::load_from_file(config_path)) {
-        LOG_INFO("Main", "Configuration loaded from: " << config_path);
+    std::string loaded_config_path;
+    if (config::load_from_file(config_path, &loaded_config_path)) {
+        LOG_INFO("Main", "Configuration loaded from: " << loaded_config_path);
     } else {
         LOG_WARN("Main", "Configuration file not found or invalid at: " << config_path << ". Using defaults.");
     }

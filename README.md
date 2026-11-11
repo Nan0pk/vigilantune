@@ -83,7 +83,9 @@ VigilanTune is engineered for ultra-low latency and minimal scheduler wakeups. T
 
 ## ⚙️ Configuration (`vigilantune.ini`)
 
-All system variables are runtime-configurable via a lightweight `vigilantune.ini` placed in the executable directory. If not present, VigilanTune automatically falls back to compile-time defaults.
+All system variables are runtime-configurable via a lightweight `vigilantune.ini` placed in the executable directory. If neither current nor legacy config exists, VigilanTune falls back to compile-time defaults.
+
+When upgrading, the agent and watchdog also read an existing `nanoloop_config.ini` if `vigilantune.ini` is absent. The old file is left untouched; the new file takes precedence when both exist. Both executables remain excluded from the process governor even when an older exclusion list is loaded.
 
 ### Reference Settings Table
 
