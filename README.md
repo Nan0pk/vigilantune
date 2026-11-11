@@ -1,9 +1,8 @@
 # 🛡️ VigilanTune - Windows Optimizer
 
 > **Status: pre-alpha.** The agent can create or activate a power plan and
-> change process settings. The current uninstaller matches plans and processes
-> by name and is not safe to run. The claims below describe the goal, not the
-> current state. See [`docs/PLAN.md`](docs/PLAN.md).
+> change process settings. The claims below describe the goal, not the current
+> state. See [`docs/PLAN.md`](docs/PLAN.md).
 
 [![Build & Test](https://github.com/Nan0pk/vigilantune/actions/workflows/build.yml/badge.svg)](https://github.com/Nan0pk/vigilantune/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -127,7 +126,7 @@ cmake --build build --config Release
 
 To run build-in CTest gates:
 ```powershell
-ctest --test-dir build --output-on-failure
+ctest --test-dir build -C Release --output-on-failure
 ```
 
 ### 🏃 Running VigilanTune
@@ -140,8 +139,13 @@ For development, start the watchdog to monitor the agent process:
 
 ## 🧹 Uninstalling
 
-The current uninstallation script is unsafe: it matches processes and power
-plans by name. Do not run it until the safety work in the plan is complete.
+The pre-alpha cleanup script stops verified VigilanTune executables inside this
+installation. It leaves power plans and telemetry untouched, and does not yet
+restore process settings or the original power plan.
+
+```powershell
+PowerShell.exe -NoProfile -File .\scripts\uninstall.ps1
+```
 
 ---
 

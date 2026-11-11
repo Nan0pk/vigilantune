@@ -11,6 +11,11 @@ FetchContent_MakeAvailable(googletest)
 
 include(GoogleTest)
 
+find_program(VIGILANTUNE_POWERSHELL NAMES pwsh powershell REQUIRED)
+add_test(NAME UninstallSafety
+  COMMAND "${VIGILANTUNE_POWERSHELL}" -NoProfile -NonInteractive -File "${CMAKE_CURRENT_SOURCE_DIR}/test_uninstall.ps1"
+)
+
 # 1. Unit tests. Safe on any machine; these are what `ctest` runs.
 add_executable(vigilantune_tests
   main.cpp
