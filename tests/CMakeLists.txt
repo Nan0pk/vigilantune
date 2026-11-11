@@ -16,6 +16,7 @@ add_executable(nanoloop_tests
   main.cpp
   test_database.cpp
   test_controller.cpp
+  test_heartbeat.cpp
   test_inference.cpp
   test_sensors.cpp
 )
