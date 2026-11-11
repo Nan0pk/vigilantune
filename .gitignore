@@ -58,6 +58,7 @@ ARM64/
 *.weights
 *.bin
 model_cache/
+/models/telemetry_log.csv
 
 # System / OS
 Thumbs.db

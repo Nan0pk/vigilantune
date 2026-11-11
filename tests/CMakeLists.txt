@@ -11,6 +11,26 @@ FetchContent_MakeAvailable(googletest)
 
 include(GoogleTest)
 
+find_program(VIGILANTUNE_POWERSHELL NAMES pwsh powershell REQUIRED)
+add_test(NAME UninstallSafety
+  COMMAND "${VIGILANTUNE_POWERSHELL}" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/test_uninstall.ps1"
+)
+
+if(WIN32)
+  add_executable(uninstall_fixture_agent test_uninstall_fixture.cpp)
+  add_executable(uninstall_fixture_watchdog test_uninstall_fixture.cpp)
+  set_target_properties(uninstall_fixture_agent PROPERTIES
+    OUTPUT_NAME "VigilanTune.Agent" RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/uninstall-fixture")
+  set_target_properties(uninstall_fixture_watchdog PROPERTIES
+    OUTPUT_NAME "VigilanTune.Watchdog" RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/uninstall-fixture")
+  add_test(NAME UninstallRealProcesses
+    COMMAND "${VIGILANTUNE_POWERSHELL}" -NoProfile -NonInteractive -ExecutionPolicy Bypass
+      -File "${CMAKE_CURRENT_SOURCE_DIR}/test_uninstall_live.ps1"
+      -AgentFixture "$<TARGET_FILE:uninstall_fixture_agent>"
+      -WatchdogFixture "$<TARGET_FILE:uninstall_fixture_watchdog>")
+  set_tests_properties(UninstallRealProcesses PROPERTIES TIMEOUT 30 SKIP_RETURN_CODE 77)
+endif()
+
 # 1. Unit tests. Safe on any machine; these are what `ctest` runs.
 add_executable(vigilantune_tests
   main.cpp
