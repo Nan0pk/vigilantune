@@ -9,10 +9,10 @@
 
 #pragma comment(lib, "bcrypt.lib")
 
-namespace nanoloop {
+namespace vigilantune {
     InferenceManager::InferenceManager(const std::wstring &model_path)
-#ifndef NANOLOOP_DISABLE_AI
-        : m_env(ORT_LOGGING_LEVEL_WARNING, "nanoloop"),
+#ifndef VIGILANTUNE_DISABLE_AI
+        : m_env(ORT_LOGGING_LEVEL_WARNING, "vigilantune"),
           m_memory_info(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)),
 #else
         :
@@ -21,7 +21,7 @@ namespace nanoloop {
 
         // Gap #7: Initialize Power Request
         REASON_CONTEXT rc = {POWER_REQUEST_CONTEXT_VERSION, POWER_REQUEST_CONTEXT_SIMPLE_STRING};
-        rc.Reason.SimpleReasonString = (LPWSTR)L"nanoloop AI Inference Cadence Protection";
+        rc.Reason.SimpleReasonString = (LPWSTR)L"vigilantune AI Inference Cadence Protection";
         m_power_request.reset(PowerCreateRequest(&rc));
 
         try {
@@ -31,7 +31,7 @@ namespace nanoloop {
                 return;
             }
 
-#ifndef NANOLOOP_DISABLE_AI
+#ifndef VIGILANTUNE_DISABLE_AI
             Ort::SessionOptions session_options;
             session_options.SetIntraOpNumThreads(1);
             session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
@@ -143,7 +143,7 @@ namespace nanoloop {
     }
 
     std::vector<float> InferenceManager::run_inference(std::vector<float> input_tensor_values) {
-#ifndef NANOLOOP_DISABLE_AI
+#ifndef VIGILANTUNE_DISABLE_AI
         if (!m_session)
             return {};
 
@@ -187,4 +187,4 @@ namespace nanoloop {
         return {};
 #endif
     }
-} // namespace nanoloop
+} // namespace vigilantune

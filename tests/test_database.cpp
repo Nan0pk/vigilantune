@@ -3,7 +3,7 @@
 #include <thread>
 #include <vector>
 
-using namespace nanoloop;
+using namespace vigilantune;
 
 TEST(TagDatabaseTest, ConcurrencyStress) {
     TagDatabase db;

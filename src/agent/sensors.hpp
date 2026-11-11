@@ -10,7 +10,7 @@
 #include "../shared/types.hpp"
 #include "../shared/scoped_handle.hpp"
 
-namespace nanoloop {
+namespace vigilantune {
     class SensorManager {
       public:
         SensorManager(TagDatabase &db);
@@ -52,4 +52,4 @@ namespace nanoloop {
             ULONG CurrentIdleState;
         };
     };
-} // namespace nanoloop
+} // namespace vigilantune

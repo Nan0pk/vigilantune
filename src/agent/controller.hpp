@@ -8,11 +8,11 @@
 #include "../shared/types.hpp"
 
 // Fix for Critical #2: Guard ONNX header include
-#ifndef NANOLOOP_DISABLE_AI
+#ifndef VIGILANTUNE_DISABLE_AI
 #include "inference.hpp"
 #endif
 
-namespace nanoloop {
+namespace vigilantune {
     struct ControlResult {
         ActuationSet adjustments;
         double stress_score;
@@ -41,8 +41,8 @@ namespace nanoloop {
         double m_last_stress_score;
         std::array<float, 5> m_inference_inputs; // Pre-allocated vector for zero-allocation AI inputs
 
-#ifndef NANOLOOP_DISABLE_AI
+#ifndef VIGILANTUNE_DISABLE_AI
         std::unique_ptr<InferenceManager> m_inference;
 #endif
     };
-} // namespace nanoloop
+} // namespace vigilantune

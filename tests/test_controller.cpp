@@ -3,7 +3,7 @@
 #include "../src/shared/config.hpp"
 #include "../src/shared/types.hpp"
 
-using namespace nanoloop;
+using namespace vigilantune;
 
 class TestController : public Controller {
   public:

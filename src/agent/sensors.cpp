@@ -9,7 +9,7 @@
 #pragma comment(lib, "pdh.lib")
 #pragma comment(lib, "PowrProf.lib")
 
-namespace nanoloop {
+namespace vigilantune {
     std::atomic<SensorManager *> SensorManager::s_instance = nullptr;
 
     SensorManager::SensorManager(TagDatabase &db)
@@ -226,4 +226,4 @@ namespace nanoloop {
             }
         }
     }
-} // namespace nanoloop
+} // namespace vigilantune

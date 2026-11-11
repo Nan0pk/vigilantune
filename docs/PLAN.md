@@ -45,12 +45,12 @@ Update your task's row in the same PR that does the work. Status is one of
 
 | ID | Task | Status | PR |
 | --- | --- | --- | --- |
-| T0.1 | Agent docs and README banner | in review | #1 |
-| T0.2 | Fix the two build errors | in review | #2 |
-| T0.3 | Park host-changing tests and timing benchmarks | in review | #2 |
-| T0.4 | CI: Release build, pinned googletest, plan-list check | in review | #2 |
-| T0.5 | Format pass | in review | #2 |
-| T0.6 | One name everywhere | todo | |
+| T0.1 | Agent docs and README banner | done | #1 |
+| T0.2 | Fix the two build errors | done | #2 |
+| T0.3 | Park host-changing tests and timing benchmarks | done | #2 |
+| T0.4 | CI: Release build, pinned googletest, plan-list check | done | #2 |
+| T0.5 | Format pass | done | #2 |
+| T0.6 | One name everywhere | in review | #3 |
 | T0.7 | Remove stale data; safe uninstall matching | todo | |
 | **Gate 0** | Clean base | closed | |
 | T1.1 | Power backend interface and fake | todo | |
@@ -304,7 +304,7 @@ instructions. Changes no behaviour.
 | T0.3 | Move `test_actuator.cpp` and `test_pipeline.cpp` into `nanoloop_host_tests`, built but never registered with ctest. Move `test_benchmark.cpp` into `nanoloop_benchmarks`, registered only with `-DNANOLOOP_BENCHMARK_TESTS=ON` under the ctest label `benchmark`. | `tests/CMakeLists.txt` | `ctest -C Release` runs neither group |
 | T0.4 | CI: build with `--config Release`; run `ctest -C Release --output-on-failure`; pin googletest to a release by full commit SHA; save `powercfg /list` before and after the tests and fail if they differ; upload the binaries as an artifact. | `.github/workflows/build.yml`, `tests/CMakeLists.txt` | Build and test jobs green; the plan-list check passes |
 | T0.5 | Run `clang-format-17` over `src` and `tests`. Formatting only. | `src/**`, `tests/**` | Format job green; a token comparison before and after shows no logic changes |
-| T0.6 | One name. Namespace `vigilantune`; programs `VigilanTune.Agent.exe` and `VigilanTune.Watchdog.exe`; config `vigilantune.ini`; plan name "VigilanTune"; README badge and links point to `Nan0pk/vigilantune`. Keep the text "Nanoloop AI Optimized" in one place only: a list of legacy plan names to clean up. | all source, CMake, scripts, README | `git grep -i -E "nanoloop\|powerwatcher\|wspa"` shows only that list, the changelog and this plan; CI green |
+| T0.6 | One name in current code and user-facing material: namespace `vigilantune`; programs `VigilanTune.Agent.exe` and `VigilanTune.Watchdog.exe`; config `vigilantune.ini`; README badge and links point to `Nan0pk/vigilantune`. Preserve the MIT copyright notice and historical release notes. Read the old config as a fallback without modifying it, and keep both executables excluded from the governor. Do not rename or broaden matching of power plans in this task; T1.3 renames the app-owned plan after ownership is established. | all source, CMake, scripts, current documentation, tests, CI configuration | The legacy-name search finds only the historical notices, changelog, this plan, legacy-plan references in the actuator and uninstaller, and config compatibility references in the loader, its tests, and README; CI green |
 | T0.7 | Delete `models/telemetry_log.csv` and ignore it in `.gitignore`. In `uninstall.ps1`, stop processes by full path inside the install folder, never by the name `agent`. | `models/`, `.gitignore`, `scripts/uninstall.ps1` | File gone; script matches on path |
 
 T0.2 to T0.5 land in one PR. CI cannot be green until all four are in, and
@@ -324,7 +324,7 @@ boost mode, proves each write, and restores the user's plan on exit.
 | --- | --- | --- | --- |
 | T1.1 | Add `IPowerBackend` with two implementations, `Win32PowerBackend` and `FakePowerBackend`. Methods: get active plan; duplicate a plan to a given GUID; set active; delete plan; set plan name; read and write mains and battery values; list the settings in a subgroup. `ActuatorManager` receives the backend in its constructor. Move the two parked test files back and run them on the fake. | new `src/agent/power_backend.*`, `actuators.*`, `tests/` | `git grep` finds no `Power*` call outside `Win32PowerBackend`; tests green; plan-list check passes |
 | T1.2 | Add `power_settings.hpp` holding only the subgroup, EPP and boost mode, by SDK symbol. Delete every hand-typed `DEFINE_GUID`. Add a unit test that compares each symbol with the GUID text in the reference table. Add a CI step that compares them with `powercfg /aliases`: fail on a different GUID, warn if the runner lacks an alias. | `power_settings.hpp`, `actuators.cpp`, `build.yml`, `tests/` | Both checks pass in CI |
-| T1.3 | Own one plan. See "T1.3 in detail". | `actuators.*`, new `state.*` | Fake-backend tests prove: no write targets another GUID (I1); `state.json` holds the original before our plan is activated; an outside plan change causes zero writes |
+| T1.3 | Own one plan. See "T1.3 in detail". Rename only a plan whose ownership has been established; never infer ownership from its name. | `actuators.*`, new `state.*` | Fake-backend tests prove: no write targets another GUID (I1); `state.json` holds the original before our plan is activated; an outside plan change causes zero writes; foreign or ambiguous plans, including name and GUID collisions, are left unchanged |
 | T1.4 | Replace the actuators and the control rule together. See "T1.4 in detail". **Never split this task.** | `actuators.*`, `controller.*`, `types.hpp`, `agent/main.cpp`, `tests/` | Tests cover clamping (I4), exists-then-read-back (I3) and failure handling; `git grep -i throttle` finds no power write |
 | T1.5 | Restore on exit. Add `ActuatorManager::shutdown()`: activate the original plan from `state.json`; if it no longer exists, activate Balanced; mark the state clean. Call it on normal exit. At start-up, if the state is not clean, restore first, then start. | `actuators.*`, `state.*`, `agent/main.cpp` | Fake-backend tests for clean exit, missing original and unclean start |
 | T1.6 | Add `--selftest` to the agent: apply each profile, print the values read back, restore, exit 0 or 1. Add `scripts/verify-hardware.ps1`: print Windows build, CPU, `powercfg /a`, active plan and `powercfg /list`; run the self-test; print `powercfg /qh` for EPP and boost mode per profile; print the active plan and plan list again; end with PASS or FAIL per check in one text block. | `agent/main.cpp`, `scripts/` | Script completes on the CI runner and prints the report |
@@ -335,12 +335,15 @@ boost mode, proves each write, and restores the user's plan on exit.
 
 1. Keep state in `%LOCALAPPDATA%\VigilanTune\state.json`. Write it to a
    temporary file, then rename over the old one.
-2. First run: read the active plan. That is the "original". Save its GUID to the
-   state file before doing anything else.
-3. If the active plan is ours or a legacy "Nanoloop AI Optimized" plan and no
-   state file exists, use Balanced as the original.
+2. Read the active plan and preserve its GUID as the original before changing
+   any plan. If a previous state identifies the active plan as ours, recover
+   the recorded original instead of treating our plan as the user's original.
+3. A matching name alone never establishes ownership. Treat an unverified
+   legacy-named active plan as the user's original. If ownership of an existing
+   plan at our fixed GUID cannot be established, enter an inactive state without
+   changing or deleting that plan.
 4. Duplicate the original into our fixed GUID from the reference table and name
-   it "VigilanTune". If our plan already exists, reuse it.
+   it "VigilanTune". Reuse an existing plan only after verifying its ownership.
 5. Read the original's EPP and boost values for mains and battery and store them
    as the baseline.
 6. Activate our plan.

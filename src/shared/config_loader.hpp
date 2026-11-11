@@ -4,10 +4,11 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <filesystem>
 #include <vector>
 #include <functional>
 
-namespace nanoloop {
+namespace vigilantune {
 
     // Lightweight INI file parser — header-only, zero external dependencies.
     // Supports sections, key=value pairs, and comments (';' and '#').
@@ -15,10 +16,20 @@ namespace nanoloop {
       public:
         // Load configuration from an INI file. Returns true if the file was found and parsed.
         bool load(const std::string &filepath) {
-            std::ifstream file(filepath);
+            std::filesystem::path source(filepath);
+            std::ifstream file(source);
+            if (!file.is_open() && source.filename() == L"vigilantune.ini") {
+                std::error_code error;
+                if (!std::filesystem::exists(source, error) && !error) {
+                    source = source.parent_path() / L"nanoloop_config.ini";
+                    file.clear();
+                    file.open(source);
+                }
+            }
             if (!file.is_open())
                 return false;
 
+            m_loaded_path = source;
             std::string line;
             std::string current_section;
 
@@ -64,6 +75,7 @@ namespace nanoloop {
         }
 
         bool is_loaded() const { return m_loaded; }
+        const std::filesystem::path &loaded_path() const { return m_loaded_path; }
 
         // Get a string value with fallback default
         std::string get_string(const std::string &key, const std::string &default_val = "") const {
@@ -135,7 +147,8 @@ namespace nanoloop {
         }
 
         std::unordered_map<std::string, std::string> m_values;
+        std::filesystem::path m_loaded_path;
         bool m_loaded = false;
     };
 
-} // namespace nanoloop
+} // namespace vigilantune

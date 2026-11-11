@@ -6,7 +6,7 @@
 #include "../shared/logger.hpp"
 #include "../shared/config.hpp"
 
-namespace nanoloop {
+namespace vigilantune {
 
     ProcessGovernor::ProcessGovernor() {
         discover_topology();
@@ -170,4 +170,4 @@ namespace nanoloop {
         }
         return "";
     }
-} // namespace nanoloop
+} // namespace vigilantune

@@ -1,4 +1,4 @@
-# [nanoloop] Power Monitoring Script
+# [vigilantune] Power Monitoring Script
 # Corrected for portability and accuracy
 # Fix for Significant #11: Use modern Get-CimInstance API
 

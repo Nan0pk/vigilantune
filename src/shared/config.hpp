@@ -5,7 +5,7 @@
 #include <windows.h>
 #include "config_loader.hpp"
 
-namespace nanoloop {
+namespace vigilantune {
     namespace config {
         // Paths (Defaults)
         inline std::wstring MODEL_PATH = L"models/power_model.onnx";
@@ -46,7 +46,10 @@ namespace nanoloop {
 
         // Governor settings
         inline int GOVERNOR_INTERVAL_MS = 5000;
-        inline std::vector<std::string> EXCLUSION_LIST = {"csrss.exe", "dwm.exe", "explorer.exe", "svchost.exe"};
+        inline constexpr char AGENT_EXCLUSION[] = "vigilantune.agent.exe";
+        inline constexpr char WATCHDOG_EXCLUSION[] = "vigilantune.watchdog.exe";
+        inline std::vector<std::string> EXCLUSION_LIST = {"csrss.exe",   "dwm.exe",       "explorer.exe",
+                                                          "svchost.exe", AGENT_EXCLUSION, WATCHDOG_EXCLUSION};
 
         // Watchdog settings
         inline int MAX_RECOVERY_ATTEMPTS = 3;
@@ -55,11 +58,14 @@ namespace nanoloop {
         inline int MAX_FILE_SIZE_MB = 50;
         inline int MAX_ROTATED_FILES = 5;
 
-        // Load config from nanoloop_config.ini
-        inline bool load_from_file(const std::string &filepath) {
+        // Load config from vigilantune.ini
+        inline bool load_from_file(const std::string &filepath, std::string *loaded_path = nullptr) {
             ConfigLoader loader;
             if (!loader.load(filepath)) {
                 return false;
+            }
+            if (loaded_path) {
+                *loaded_path = loader.loaded_path().string();
             }
 
             DATA_COLLECTION_MODE = loader.get_bool("general.data_collection", DATA_COLLECTION_MODE);
@@ -103,6 +109,8 @@ namespace nanoloop {
             auto list = loader.get_list("governor.exclusion_list");
             if (!list.empty()) {
                 EXCLUSION_LIST = list;
+                EXCLUSION_LIST.emplace_back(AGENT_EXCLUSION);
+                EXCLUSION_LIST.emplace_back(WATCHDOG_EXCLUSION);
             }
             GOVERNOR_INTERVAL_MS = loader.get_int("governor.governor_interval_ms", GOVERNOR_INTERVAL_MS);
 
@@ -116,4 +124,4 @@ namespace nanoloop {
             return true;
         }
     } // namespace config
-} // namespace nanoloop
+} // namespace vigilantune

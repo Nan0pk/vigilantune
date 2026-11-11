@@ -1,5 +1,5 @@
-# nanoloop Power Agent — Uninstall Script
-# Purpose: Cleanly removes the Nanoloop AI Optimized power scheme,
+# VigilanTune Power Agent — Uninstall Script
+# Purpose: Removes legacy power schemes,
 #          stops running agent/watchdog processes, and deletes telemetry logs.
 # Usage:   Run from an elevated (Administrator) PowerShell prompt.
 
@@ -75,7 +75,7 @@ if ($guidsToDelete.Count -gt 0) {
         }
     }
 } else {
-    Write-Host "      No nanoloop power schemes found — nothing to delete." -ForegroundColor DarkGray
+    Write-Host "      No matching legacy power schemes found — nothing to delete." -ForegroundColor DarkGray
 }
 
 # --- Step 4: Remove telemetry logs ---
@@ -96,4 +96,4 @@ if ($logs) {
 }
 
 Write-Host ""
-Write-Host "nanoloop Power Agent uninstall complete." -ForegroundColor Green
+Write-Host "VigilanTune Power Agent uninstall complete." -ForegroundColor Green

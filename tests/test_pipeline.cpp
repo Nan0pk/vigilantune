@@ -6,7 +6,7 @@
 #include <thread>
 #include <chrono>
 
-using namespace nanoloop;
+using namespace vigilantune;
 
 TEST(PipelineTest, FullFlow) {
     TagDatabase db;

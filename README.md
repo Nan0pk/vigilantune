@@ -1,10 +1,11 @@
 # 🛡️ VigilanTune - Windows Optimizer
 
-> **Status: pre-alpha.** This build does not yet change power settings, and the
-> claims below describe the goal, not the current state. The plan to 1.0 is in
-> [`docs/PLAN.md`](docs/PLAN.md).
+> **Status: pre-alpha.** The agent can create or activate a power plan and
+> change process settings. The current uninstaller matches plans and processes
+> by name and is not safe to run. The claims below describe the goal, not the
+> current state. See [`docs/PLAN.md`](docs/PLAN.md).
 
-[![Build & Test](https://github.com/geminipro123pakistan-ctrl/nanoloop/actions/workflows/build.yml/badge.svg)](https://github.com/geminipro123pakistan-ctrl/nanoloop/actions/workflows/build.yml)
+[![Build & Test](https://github.com/Nan0pk/vigilantune/actions/workflows/build.yml/badge.svg)](https://github.com/Nan0pk/vigilantune/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows-blue.svg)](https://microsoft.com/windows)
 
@@ -23,7 +24,7 @@ graph TD
         C[High-Fidelity PDH Metrics] -->|CPU/GPU/Thermal/Disk| B
     end
 
-    subgraph Agent ["Core Agent (agent.exe)"]
+    subgraph Agent ["Core Agent (VigilanTune.Agent.exe)"]
         B -->|Atomic Snapshot| D[Stress Controller]
         D -->|Inference Inputs| E[ONNX Inference Engine]
         E -->|Model Evaluation| F[Actuator Pipeline]
@@ -31,7 +32,7 @@ graph TD
         D -->|Heartbeat Ticks| H[Lock-Free Shared Memory IPC]
     end
 
-    subgraph Watchdog ["Safety Monitor (watchdog.exe)"]
+    subgraph Watchdog ["Safety Monitor (VigilanTune.Watchdog.exe)"]
         H -->|Check Alive every 1s| I[Heartbeat Monitor]
         I -->|Stale? Terminate & Recovery| J[Process Lifecycle Guard]
         J -->|Fail-Safe Trigger| K[Balanced Scheme Reset]
@@ -43,7 +44,7 @@ graph TD
 ```
 
 ### ⚡ Performance Benchmarks
-nanoloop is engineered for ultra-low latency and minimal scheduler wakeups. The core control path is completely zero-allocation (`std::array` + `std::atomic`).
+VigilanTune is engineered for ultra-low latency and minimal scheduler wakeups. The core control path is completely zero-allocation (`std::array` + `std::atomic`).
 - **Telemetry Ingestion (`TagDatabase::set`)**: ~14.8 ns/op
 - **Dirty-State Evaluation (`Controller::evaluate`)**: ~24.0 ns/op
 - **Mutex Contention**: 0 (Fully Lock-Free)
@@ -74,15 +75,17 @@ nanoloop is engineered for ultra-low latency and minimal scheduler wakeups. The 
 * **Persistence:** Correctly negotiates scheme re-activation using strict GUID lifecycle management and dynamic schema duplication.
 
 ### 4. Safety & Recovery Layer (The Watchdog)
-* **Mutual Heartbeat Monitoring:** The watchdog process polls a lock-free named shared memory section (`Local\Nanoloop_Heartbeat`) updated by the agent. If the agent hangs (ticks stop advancing for 5 seconds), it is immediately terminated and recovered.
+* **Mutual Heartbeat Monitoring:** The watchdog process polls a lock-free named shared memory section (`Local\VigilanTune_Heartbeat`) updated by the agent. If the agent hangs (ticks stop advancing for 5 seconds), it is immediately terminated and recovered.
 * **Industrial Safe State Assertion:** The watchdog asserts the standard `Balanced` power scheme as a known-safe baseline upon agent crash/hang.
 * **Exponential Backoff:** Ensures cyclic failure resilience before attempting system recovery.
 
 ---
 
-## ⚙️ Configuration (`nanoloop_config.ini`)
+## ⚙️ Configuration (`vigilantune.ini`)
 
-All system variables are runtime-configurable via a lightweight `nanoloop_config.ini` placed in the executable directory. If not present, nanoloop automatically falls back to hardened compile-time defaults.
+All system variables are runtime-configurable via a lightweight `vigilantune.ini` placed in the executable directory. If neither current nor legacy config exists, VigilanTune falls back to compile-time defaults.
+
+When upgrading, the agent and watchdog also read an existing `nanoloop_config.ini` if `vigilantune.ini` is absent. The old file is left untouched; the new file takes precedence when both exist. Both executables remain excluded from the process governor even when an older exclusion list is loaded.
 
 ### Reference Settings Table
 
@@ -118,7 +121,7 @@ All system variables are runtime-configurable via a lightweight `nanoloop_config
 ### 🔨 Build & Validate
 To compile and test without local ONNX Runtime dependencies (disabled AI mode):
 ```powershell
-cmake -B build -DNANOLOOP_DISABLE_AI=ON
+cmake -B build -DVIGILANTUNE_DISABLE_AI=ON
 cmake --build build --config Release
 ```
 
@@ -127,30 +130,20 @@ To run build-in CTest gates:
 ctest --test-dir build --output-on-failure
 ```
 
-### 🏃 Running nanoloop
-Start nanoloop by launching the watchdog to monitor the agent process:
+### 🏃 Running VigilanTune
+For development, start the watchdog to monitor the agent process:
 ```powershell
-.\build\src\watchdog\Release\watchdog.exe .\build\src\agent\Release\agent.exe
+.\build\src\watchdog\Release\VigilanTune.Watchdog.exe .\build\src\agent\Release\VigilanTune.Agent.exe
 ```
 
 ---
 
 ## 🧹 Uninstalling
 
-nanoloop includes a built-in clean uninstallation script to restore the host system to default settings and wipe telemetry files.
-
-Run the uninstaller via PowerShell (requires Elevation):
-```powershell
-Powershell.exe -ExecutionPolicy Bypass -File .\scripts\uninstall.ps1
-```
-
-This script will automatically:
-1. Safely stop the running `agent` and `watchdog` processes.
-2. Revert the active Windows power scheme to the system default `Balanced` scheme.
-3. Cleanly delete the `Nanoloop AI Optimized` power scheme from the OS.
-4. Purge all telemetry logs and rotated files.
+The current uninstallation script is unsafe: it matches processes and power
+plans by name. Do not run it until the safety work in the plan is complete.
 
 ---
 
 ## 📜 License
-MIT License. Copyright 2026 nanoloop Contributors.
+See the [MIT license](LICENSE) for the copyright notice.

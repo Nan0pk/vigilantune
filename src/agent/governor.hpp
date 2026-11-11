@@ -5,7 +5,7 @@
 #include <unordered_set>
 #include <memory>
 
-namespace nanoloop {
+namespace vigilantune {
     class ProcessGovernor {
       public:
         ProcessGovernor();
@@ -33,4 +33,4 @@ namespace nanoloop {
         // Internal Win32 helper for process names
         std::string get_process_name(DWORD pid);
     };
-} // namespace nanoloop
+} // namespace vigilantune

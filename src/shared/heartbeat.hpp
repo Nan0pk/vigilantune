@@ -7,7 +7,9 @@
 #include <cstdint>
 #include <string>
 
-namespace nanoloop {
+namespace vigilantune {
+
+    inline constexpr wchar_t HEARTBEAT_MAPPING_NAME[] = L"Local\\VigilanTune_Heartbeat";
 
     // Shared memory layout for Agent <-> Watchdog heartbeat IPC.
     // The agent writes a monotonically increasing tick counter every control loop.
@@ -21,9 +23,10 @@ namespace nanoloop {
     // Agent-side heartbeat writer
     class HeartbeatWriter {
       public:
-        HeartbeatWriter() : m_mapping(NULL), m_data(nullptr) {
-            m_mapping = CreateFileMappingA(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(HeartbeatData),
-                                           "Local\\Nanoloop_Heartbeat");
+        explicit HeartbeatWriter(const wchar_t *mapping_name = HEARTBEAT_MAPPING_NAME)
+            : m_mapping(NULL), m_data(nullptr) {
+            m_mapping =
+                CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(HeartbeatData), mapping_name);
 
             if (m_mapping) {
                 m_data = (HeartbeatData *)MapViewOfFile(m_mapping, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(HeartbeatData));
@@ -65,8 +68,9 @@ namespace nanoloop {
     // Watchdog-side heartbeat reader
     class HeartbeatReader {
       public:
-        HeartbeatReader() : m_mapping(NULL), m_data(nullptr) {
-            m_mapping = OpenFileMappingA(FILE_MAP_READ, FALSE, "Local\\Nanoloop_Heartbeat");
+        explicit HeartbeatReader(const wchar_t *mapping_name = HEARTBEAT_MAPPING_NAME)
+            : m_mapping(NULL), m_data(nullptr) {
+            m_mapping = OpenFileMappingW(FILE_MAP_READ, FALSE, mapping_name);
             if (m_mapping) {
                 m_data = (HeartbeatData *)MapViewOfFile(m_mapping, FILE_MAP_READ, 0, 0, sizeof(HeartbeatData));
             }
@@ -114,4 +118,4 @@ namespace nanoloop {
         HeartbeatData *m_data;
     };
 
-} // namespace nanoloop
+} // namespace vigilantune

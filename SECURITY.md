@@ -9,10 +9,10 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in nanoloop Power Agent, please report it responsibly:
+If you discover a security vulnerability in VigilanTune Power Agent, please report it responsibly:
 
 1. **Email:** Send a detailed report to the project maintainer via the email listed in the repository profile.
-2. **GitHub Private Advisory:** Open a [private security advisory](https://docs.github.com/en/code-security/security-advisories/working-with-repository-security-advisories/creating-a-repository-security-advisory) on the nanoloop GitHub repository.
+2. **GitHub Private Advisory:** Open a [private security advisory](https://docs.github.com/en/code-security/security-advisories/working-with-repository-security-advisories/creating-a-repository-security-advisory) on the VigilanTune GitHub repository.
 
 Please include the following in your report:
 
