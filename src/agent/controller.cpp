@@ -15,21 +15,22 @@ namespace nanoloop {
 
     Controller::~Controller() {}
 
-    ControlResult Controller::evaluate(const TagDatabase& db) {
+    ControlResult Controller::evaluate(const TagDatabase &db) {
         ControlResult result;
         auto db_snapshot = db.get_snapshot();
-        
+
         result.stress_score = calculate_stress_score(db_snapshot);
-        
+
         // Architecture #3: Adaptive Loop Interval
         // Higher stress -> lower interval (faster response)
         double stress_norm = result.stress_score / 100.0;
-        result.recommended_interval_ms = (int)(config::MAX_CONTROL_LOOP_INTERVAL_MS - 
-            (stress_norm * (config::MAX_CONTROL_LOOP_INTERVAL_MS - config::MIN_CONTROL_LOOP_INTERVAL_MS)));
+        result.recommended_interval_ms =
+            (int)(config::MAX_CONTROL_LOOP_INTERVAL_MS -
+                  (stress_norm * (config::MAX_CONTROL_LOOP_INTERVAL_MS - config::MIN_CONTROL_LOOP_INTERVAL_MS)));
 
         if (m_first_run || db_snapshot.is_dirty(m_last_state, config::DIRTY_FLAG_EPSILON)) {
             result.adjustments = compute_adjustments(db_snapshot, result.stress_score);
-            
+
             m_last_state = db_snapshot;
             m_last_stress_score = result.stress_score;
             m_first_run = false;
@@ -38,7 +39,7 @@ namespace nanoloop {
         return result;
     }
 
-    ActuationSet Controller::compute_adjustments(const TagSnapshot& snapshot, double stress_score) {
+    ActuationSet Controller::compute_adjustments(const TagSnapshot &snapshot, double stress_score) {
         ActuationSet adjustments;
 
         float app_hash = (float)snapshot.values[static_cast<size_t>(TagID::Foreground_App_Hash)];
@@ -56,8 +57,10 @@ namespace nanoloop {
             std::vector<float> in_vec(m_inference_inputs.begin(), m_inference_inputs.end());
             auto outputs = m_inference->run_inference(in_vec);
             if (!outputs.empty()) {
-                if (outputs.size() > 0) adjustments.set(ActuatorID::PerformanceBoost, outputs[0]);
-                if (outputs.size() > 1) adjustments.set(ActuatorID::ProcessorFloor, outputs[1]);
+                if (outputs.size() > 0)
+                    adjustments.set(ActuatorID::PerformanceBoost, outputs[0]);
+                if (outputs.size() > 1)
+                    adjustments.set(ActuatorID::ProcessorFloor, outputs[1]);
                 ai_used = true;
             }
         }
@@ -84,13 +87,14 @@ namespace nanoloop {
         return adjustments;
     }
 
-    static uint64_t get_file_size(const std::string& path) {
+    static uint64_t get_file_size(const std::string &path) {
         std::ifstream in(path, std::ifstream::ate | std::ifstream::binary);
-        if (!in.is_open()) return 0;
+        if (!in.is_open())
+            return 0;
         return in.tellg();
     }
 
-    void Controller::log_snapshot(const std::array<float, 5>& inputs, double label) {
+    void Controller::log_snapshot(const std::array<float, 5> &inputs, double label) {
         std::string filepath = config::TELEMETRY_LOG_PATH;
         uint64_t max_bytes = static_cast<uint64_t>(config::MAX_FILE_SIZE_MB) * 1024 * 1024;
 
@@ -109,7 +113,7 @@ namespace nanoloop {
                     } else {
                         src = filepath.substr(0, dot) + "_" + std::to_string(i - 1) + filepath.substr(dot);
                     }
-                    
+
                     std::string dst = filepath.substr(0, dot) + "_" + std::to_string(i) + filepath.substr(dot);
                     std::rename(src.c_str(), dst.c_str());
                 }
@@ -126,10 +130,12 @@ namespace nanoloop {
         }
 
         std::ofstream file(filepath, std::ios::app);
-        if (!file.is_open()) return;
+        if (!file.is_open())
+            return;
 
         if (header_needed) {
-            file << "CPU_Utilization,Thread_Queue_Length,Stress_Score,App_Hash,Last_Adjustment,PerformanceBoost_Label\n";
+            file
+                << "CPU_Utilization,Thread_Queue_Length,Stress_Score,App_Hash,Last_Adjustment,PerformanceBoost_Label\n";
             header_needed = false;
         }
 
@@ -139,7 +145,7 @@ namespace nanoloop {
         file << label << "\n";
     }
 
-    double Controller::calculate_stress_score(const TagSnapshot& db) {
+    double Controller::calculate_stress_score(const TagSnapshot &db) {
         double cpu = db.values[static_cast<size_t>(TagID::CPU_Utilization)];
         int queue = (int)db.values[static_cast<size_t>(TagID::Thread_Queue_Length)];
         double thermal = db.values[static_cast<size_t>(TagID::Thermal_Headroom)];
@@ -148,13 +154,11 @@ namespace nanoloop {
 
         double queue_norm = std::clamp(std::log1p(queue) / std::log1p(50.0) * 100.0, 0.0, 100.0);
         double thermal_pressure = std::clamp((thermal - 60.0) / 40.0, 0.0, 1.0) * 100.0;
-        
-        double sss = (cpu * config::SSS_CPU_WEIGHT) + 
-                     (queue_norm * config::SSS_QUEUE_WEIGHT) + 
-                     (thermal_pressure * config::SSS_THERMAL_WEIGHT) +
-                     (gpu * config::SSS_GPU_WEIGHT) +
+
+        double sss = (cpu * config::SSS_CPU_WEIGHT) + (queue_norm * config::SSS_QUEUE_WEIGHT) +
+                     (thermal_pressure * config::SSS_THERMAL_WEIGHT) + (gpu * config::SSS_GPU_WEIGHT) +
                      (disk * config::SSS_DISK_WEIGHT);
-        
+
         return std::clamp(sss, 0.0, 100.0);
     }
 } // namespace nanoloop

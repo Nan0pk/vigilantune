@@ -20,21 +20,21 @@ namespace nanoloop {
     };
 
     class Controller {
-    public:
+      public:
         Controller();
         ~Controller();
 
         // Evaluates the current state and returns relative changes + stress score
-        ControlResult evaluate(const TagDatabase& db);
+        ControlResult evaluate(const TagDatabase &db);
 
-    protected:
-        double calculate_stress_score(const TagSnapshot& db);
-        
+      protected:
+        double calculate_stress_score(const TagSnapshot &db);
+
         // Phase 1: Data Collection Helper
-        void log_snapshot(const std::array<float, 5>& inputs, double label);
+        void log_snapshot(const std::array<float, 5> &inputs, double label);
 
         // Logic helper for adjustments (Significant #6)
-        ActuationSet compute_adjustments(const TagSnapshot& snapshot, double stress_score);
+        ActuationSet compute_adjustments(const TagSnapshot &snapshot, double stress_score);
 
         TagSnapshot m_last_state;
         bool m_first_run{true};

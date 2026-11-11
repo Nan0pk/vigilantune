@@ -20,16 +20,14 @@ namespace nanoloop {
 
     // Agent-side heartbeat writer
     class HeartbeatWriter {
-    public:
+      public:
         HeartbeatWriter() : m_mapping(NULL), m_data(nullptr) {
-            m_mapping = CreateFileMappingA(
-                INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE,
-                0, sizeof(HeartbeatData), "Local\\Nanoloop_Heartbeat");
-            
+            m_mapping = CreateFileMappingA(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(HeartbeatData),
+                                           "Local\\Nanoloop_Heartbeat");
+
             if (m_mapping) {
-                m_data = (HeartbeatData*)MapViewOfFile(
-                    m_mapping, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(HeartbeatData));
-                
+                m_data = (HeartbeatData *)MapViewOfFile(m_mapping, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(HeartbeatData));
+
                 if (m_data) {
                     m_data->tick_counter.store(0, std::memory_order_release);
                     m_data->last_tick_time.store(0, std::memory_order_release);
@@ -39,13 +37,16 @@ namespace nanoloop {
         }
 
         ~HeartbeatWriter() {
-            if (m_data) UnmapViewOfFile(m_data);
-            if (m_mapping) CloseHandle(m_mapping);
+            if (m_data)
+                UnmapViewOfFile(m_data);
+            if (m_mapping)
+                CloseHandle(m_mapping);
         }
 
         // Call this at the end of each control loop iteration
         void tick() {
-            if (!m_data) return;
+            if (!m_data)
+                return;
             m_data->tick_counter.fetch_add(1, std::memory_order_release);
             auto now = GetTickCount64();
             m_data->last_tick_time.store(now, std::memory_order_release);
@@ -53,59 +54,64 @@ namespace nanoloop {
 
         bool valid() const { return m_data != nullptr; }
 
-        HeartbeatWriter(const HeartbeatWriter&) = delete;
-        HeartbeatWriter& operator=(const HeartbeatWriter&) = delete;
+        HeartbeatWriter(const HeartbeatWriter &) = delete;
+        HeartbeatWriter &operator=(const HeartbeatWriter &) = delete;
 
-    private:
+      private:
         HANDLE m_mapping;
-        HeartbeatData* m_data;
+        HeartbeatData *m_data;
     };
 
     // Watchdog-side heartbeat reader
     class HeartbeatReader {
-    public:
+      public:
         HeartbeatReader() : m_mapping(NULL), m_data(nullptr) {
             m_mapping = OpenFileMappingA(FILE_MAP_READ, FALSE, "Local\\Nanoloop_Heartbeat");
             if (m_mapping) {
-                m_data = (HeartbeatData*)MapViewOfFile(
-                    m_mapping, FILE_MAP_READ, 0, 0, sizeof(HeartbeatData));
+                m_data = (HeartbeatData *)MapViewOfFile(m_mapping, FILE_MAP_READ, 0, 0, sizeof(HeartbeatData));
             }
         }
 
         ~HeartbeatReader() {
-            if (m_data) UnmapViewOfFile(m_data);
-            if (m_mapping) CloseHandle(m_mapping);
+            if (m_data)
+                UnmapViewOfFile(m_data);
+            if (m_mapping)
+                CloseHandle(m_mapping);
         }
 
         bool valid() const { return m_data != nullptr; }
 
         // Returns true if the agent's heartbeat has advanced since the last check
         bool is_alive(uint64_t timeout_ms = 5000) const {
-            if (!m_data) return false;
-            
+            if (!m_data)
+                return false;
+
             uint64_t last_time = m_data->last_tick_time.load(std::memory_order_acquire);
-            if (last_time == 0) return true; // Agent hasn't started ticking yet
-            
+            if (last_time == 0)
+                return true; // Agent hasn't started ticking yet
+
             uint64_t now = GetTickCount64();
             return (now - last_time) < timeout_ms;
         }
 
         uint64_t get_tick_count() const {
-            if (!m_data) return 0;
+            if (!m_data)
+                return 0;
             return m_data->tick_counter.load(std::memory_order_acquire);
         }
 
         uint32_t get_agent_pid() const {
-            if (!m_data) return 0;
+            if (!m_data)
+                return 0;
             return m_data->agent_pid.load(std::memory_order_acquire);
         }
 
-        HeartbeatReader(const HeartbeatReader&) = delete;
-        HeartbeatReader& operator=(const HeartbeatReader&) = delete;
+        HeartbeatReader(const HeartbeatReader &) = delete;
+        HeartbeatReader &operator=(const HeartbeatReader &) = delete;
 
-    private:
+      private:
         HANDLE m_mapping;
-        HeartbeatData* m_data;
+        HeartbeatData *m_data;
     };
 
 } // namespace nanoloop
