@@ -5,7 +5,7 @@
 #include <windows.h>
 #include "config_loader.hpp"
 
-namespace nanoloop {
+namespace vigilantune {
     namespace config {
         // Paths (Defaults)
         inline std::wstring MODEL_PATH = L"models/power_model.onnx";
@@ -55,7 +55,7 @@ namespace nanoloop {
         inline int MAX_FILE_SIZE_MB = 50;
         inline int MAX_ROTATED_FILES = 5;
 
-        // Load config from nanoloop_config.ini
+        // Load config from vigilantune.ini
         inline bool load_from_file(const std::string &filepath) {
             ConfigLoader loader;
             if (!loader.load(filepath)) {
@@ -116,4 +116,4 @@ namespace nanoloop {
             return true;
         }
     } // namespace config
-} // namespace nanoloop
+} // namespace vigilantune

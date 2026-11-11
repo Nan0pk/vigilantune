@@ -5,7 +5,7 @@
 #include <windows.h>
 #include <pdh.h>
 
-namespace nanoloop {
+namespace vigilantune {
     // Generic RAII wrapper for Win32 HANDLE types
     class ScopedHandle {
       public:
@@ -163,4 +163,4 @@ namespace nanoloop {
         }
         PDH_HQUERY m_query;
     };
-} // namespace nanoloop
+} // namespace vigilantune

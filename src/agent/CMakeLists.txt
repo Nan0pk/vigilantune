@@ -28,7 +28,7 @@ target_link_libraries(agent_core PRIVATE User32.lib PowrProf.lib Pdh.lib bcrypt.
 
 if(NOT HAS_ONNX)
     message(WARNING "ONNX Runtime not found. AI Inference will be disabled in the build.")
-    target_compile_definitions(agent_core PUBLIC NANOLOOP_DISABLE_AI)
+    target_compile_definitions(agent_core PUBLIC VIGILANTUNE_DISABLE_AI)
 else()
     if(onnxruntime_FOUND)
         target_link_libraries(agent_core PUBLIC onnxruntime)
@@ -43,6 +43,7 @@ add_executable(agent
     main.cpp
     agent.manifest
 )
+set_target_properties(agent PROPERTIES OUTPUT_NAME "VigilanTune.Agent")
 target_link_libraries(agent PRIVATE agent_core)
 
 # agent.manifest sets the UAC level. Stop the linker adding its own "asInvoker"

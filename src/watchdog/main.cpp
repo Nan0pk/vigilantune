@@ -13,7 +13,7 @@
 
 #pragma comment(lib, "PowrProf.lib")
 
-using namespace nanoloop;
+using namespace vigilantune;
 
 bool StartAgent(const std::string &path, PROCESS_INFORMATION &pi) {
     STARTUPINFOA si = {sizeof(si)};
@@ -91,20 +91,20 @@ void monitor_heartbeat(HANDLE hProcess, DWORD pid, std::atomic<bool> &active) {
 int main(int argc, char *argv[]) {
     // Setup mirror file logging next to watchdog executable
     std::string exe_dir = get_executable_directory();
-    std::string log_file_path = exe_dir.empty() ? "nanoloop_watchdog.log" : (exe_dir + "\\nanoloop_watchdog.log");
+    std::string log_file_path = exe_dir.empty() ? "vigilantune_watchdog.log" : (exe_dir + "\\vigilantune_watchdog.log");
     log::LoggerState::instance().initFile(log_file_path);
 
-    LOG_INFO("Watchdog", "--- nanoloop Watchdog Monitor ---");
+    LOG_INFO("Watchdog", "--- vigilantune Watchdog Monitor ---");
 
     if (argc < 2) {
-        LOG_FATAL("Watchdog", "Usage: watchdog.exe <AGENT_EXE_PATH>");
+        LOG_FATAL("Watchdog", "Usage: VigilanTune.Watchdog.exe <AGENT_EXE_PATH>");
         return 1;
     }
 
     std::string agentPath = argv[1];
 
     // Load configuration to get max recoveries
-    std::string config_path = exe_dir.empty() ? "nanoloop_config.ini" : (exe_dir + "\\nanoloop_config.ini");
+    std::string config_path = exe_dir.empty() ? "vigilantune.ini" : (exe_dir + "\\vigilantune.ini");
     config::load_from_file(config_path);
 
     int recoveryCount = 0;

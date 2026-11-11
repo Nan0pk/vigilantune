@@ -4,7 +4,7 @@
 #include <atomic>
 #include <chrono>
 
-namespace nanoloop {
+namespace vigilantune {
     enum class TagID : size_t {
         CPU_Utilization = 0,
         Thread_Queue_Length,
@@ -93,4 +93,4 @@ namespace nanoloop {
         std::array<std::atomic<double>, static_cast<size_t>(TagID::MAX_TAGS)> m_values;
         std::array<std::atomic<uint64_t>, static_cast<size_t>(TagID::MAX_TAGS)> m_timestamps;
     };
-} // namespace nanoloop
+} // namespace vigilantune

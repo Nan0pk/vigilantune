@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <string>
 
-namespace nanoloop {
+namespace vigilantune {
 
     // Shared memory layout for Agent <-> Watchdog heartbeat IPC.
     // The agent writes a monotonically increasing tick counter every control loop.
@@ -22,8 +22,8 @@ namespace nanoloop {
     class HeartbeatWriter {
       public:
         HeartbeatWriter() : m_mapping(NULL), m_data(nullptr) {
-            m_mapping = CreateFileMappingA(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(HeartbeatData),
-                                           "Local\\Nanoloop_Heartbeat");
+            m_mapping = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(HeartbeatData),
+                                           L"Local\\VigilanTune_Heartbeat");
 
             if (m_mapping) {
                 m_data = (HeartbeatData *)MapViewOfFile(m_mapping, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(HeartbeatData));
@@ -66,7 +66,7 @@ namespace nanoloop {
     class HeartbeatReader {
       public:
         HeartbeatReader() : m_mapping(NULL), m_data(nullptr) {
-            m_mapping = OpenFileMappingA(FILE_MAP_READ, FALSE, "Local\\Nanoloop_Heartbeat");
+            m_mapping = OpenFileMappingW(FILE_MAP_READ, FALSE, L"Local\\VigilanTune_Heartbeat");
             if (m_mapping) {
                 m_data = (HeartbeatData *)MapViewOfFile(m_mapping, FILE_MAP_READ, 0, 0, sizeof(HeartbeatData));
             }
@@ -114,4 +114,4 @@ namespace nanoloop {
         HeartbeatData *m_data;
     };
 
-} // namespace nanoloop
+} // namespace vigilantune

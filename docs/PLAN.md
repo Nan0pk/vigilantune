@@ -50,7 +50,7 @@ Update your task's row in the same PR that does the work. Status is one of
 | T0.3 | Park host-changing tests and timing benchmarks | done | #2 |
 | T0.4 | CI: Release build, pinned googletest, plan-list check | done | #2 |
 | T0.5 | Format pass | done | #2 |
-| T0.6 | One name everywhere | in review | |
+| T0.6 | One name everywhere | in review | #3 |
 | T0.7 | Remove stale data; safe uninstall matching | todo | |
 | **Gate 0** | Clean base | closed | |
 | T1.1 | Power backend interface and fake | todo | |

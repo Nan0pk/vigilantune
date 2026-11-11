@@ -7,7 +7,7 @@
 #include <vector>
 #include <functional>
 
-namespace nanoloop {
+namespace vigilantune {
 
     // Lightweight INI file parser — header-only, zero external dependencies.
     // Supports sections, key=value pairs, and comments (';' and '#').
@@ -138,4 +138,4 @@ namespace nanoloop {
         bool m_loaded = false;
     };
 
-} // namespace nanoloop
+} // namespace vigilantune

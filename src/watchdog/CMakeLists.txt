@@ -2,6 +2,7 @@ add_executable(watchdog
     main.cpp
     watchdog.manifest
 )
+set_target_properties(watchdog PROPERTIES OUTPUT_NAME "VigilanTune.Watchdog")
 
 # Fix for Significant #8: Link shared and Win32 libs
 target_link_libraries(watchdog PRIVATE shared PowrProf.lib)

@@ -5,7 +5,7 @@
 #include <array>
 #include "../shared/types.hpp"
 
-namespace nanoloop {
+namespace vigilantune {
     class ActuatorManager {
       public:
         ActuatorManager();
@@ -33,4 +33,4 @@ namespace nanoloop {
         ActuationSet m_last_applied_values;
         ActuationSet m_queued_adjustments;
     };
-} // namespace nanoloop
+} // namespace vigilantune

@@ -3,7 +3,7 @@
 #include <fstream>
 #include <filesystem>
 
-using namespace nanoloop;
+using namespace vigilantune;
 
 class TestInferenceManager : public InferenceManager {
   public:
@@ -17,10 +17,10 @@ TEST(InferenceTest, HashVerification) {
     // Create a dummy file
     std::string filename = "test_model.bin";
     std::ofstream ofs(filename, std::ios::binary);
-    ofs << "nanoloop Test Data";
+    ofs << "vigilantune Test Data";
     ofs.close();
 
-    // SHA-256 of "nanoloop Test Data" is:
+    // SHA-256 of "vigilantune Test Data" is:
     // 6f1a8b5e7d5e6e8e... (let's calculate it or just use a mismatch first)
     // Actually, I'll just use the code to get the actual and then verify it matches itself.
 

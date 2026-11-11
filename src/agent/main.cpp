@@ -17,7 +17,7 @@
 #include "controller.hpp"
 #include "governor.hpp"
 
-using namespace nanoloop;
+using namespace vigilantune;
 
 std::atomic<bool> g_running(true);
 std::atomic<bool> g_suspended(false);
@@ -43,15 +43,15 @@ bool IsWatchdogRunning() {
     bool running = false;
     HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (hSnapshot != INVALID_HANDLE_VALUE) {
-        PROCESSENTRY32 pe32;
-        pe32.dwSize = sizeof(PROCESSENTRY32);
-        if (Process32First(hSnapshot, &pe32)) {
+        PROCESSENTRY32W pe32;
+        pe32.dwSize = sizeof(pe32);
+        if (Process32FirstW(hSnapshot, &pe32)) {
             do {
-                if (std::string(pe32.szExeFile) == "watchdog.exe") {
+                if (std::wstring(pe32.szExeFile) == L"VigilanTune.Watchdog.exe") {
                     running = true;
                     break;
                 }
-            } while (Process32Next(hSnapshot, &pe32));
+            } while (Process32NextW(hSnapshot, &pe32));
         }
         CloseHandle(hSnapshot);
     }
@@ -87,7 +87,7 @@ void control_loop(TagDatabase &db, ActuatorManager &actuators, Controller &contr
     int interval_ms = config::MAX_CONTROL_LOOP_INTERVAL_MS;
 
     // Safety #1: Shared Memory Heartbeat IPC Writer
-    nanoloop::HeartbeatWriter heartbeat;
+    vigilantune::HeartbeatWriter heartbeat;
     if (heartbeat.valid()) {
         LOG_INFO("Main", "Shared memory heartbeat writer initialized successfully.");
     } else {
@@ -157,7 +157,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         PostQuitMessage(0);
         return 0;
     }
-    return DefWindowProc(hwnd, uMsg, wParam, lParam);
+    return DefWindowProcW(hwnd, uMsg, wParam, lParam);
 }
 
 std::string get_executable_directory() {
@@ -178,13 +178,13 @@ int main() {
 
     // 2. Load Configuration from INI file next to the executable
     std::string exe_dir = get_executable_directory();
-    std::string config_path = exe_dir.empty() ? "nanoloop_config.ini" : (exe_dir + "\\nanoloop_config.ini");
+    std::string config_path = exe_dir.empty() ? "vigilantune.ini" : (exe_dir + "\\vigilantune.ini");
 
     // Pre-initialize console mirror logging file next to executable
-    std::string log_file_path = exe_dir.empty() ? "nanoloop_agent.log" : (exe_dir + "\\nanoloop_agent.log");
+    std::string log_file_path = exe_dir.empty() ? "vigilantune_agent.log" : (exe_dir + "\\vigilantune_agent.log");
     log::LoggerState::instance().initFile(log_file_path);
 
-    LOG_INFO("Main", "--- nanoloop Power Agent ---");
+    LOG_INFO("Main", "--- vigilantune Power Agent ---");
 
     if (config::load_from_file(config_path)) {
         LOG_INFO("Main", "Configuration loaded from: " << config_path);
@@ -225,12 +225,12 @@ int main() {
     sensors.start();
 
     // 3. Setup Message Window for Power Events
-    WNDCLASSA wc = {0};
+    WNDCLASSW wc = {0};
     wc.lpfnWndProc = WindowProc;
-    wc.hInstance = GetModuleHandle(NULL);
-    wc.lpszClassName = "Nanoloop_MessageWindow";
-    RegisterClassA(&wc);
-    HWND hwnd = CreateWindowExA(0, wc.lpszClassName, NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, NULL, NULL);
+    wc.hInstance = GetModuleHandleW(NULL);
+    wc.lpszClassName = L"VigilanTune_MessageWindow";
+    RegisterClassW(&wc);
+    HWND hwnd = CreateWindowExW(0, wc.lpszClassName, NULL, 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, NULL, NULL);
 
     HPOWERNOTIFY hBatteryNotify =
         RegisterPowerSettingNotification(hwnd, &GUID_POWER_SAVING_STATUS, DEVICE_NOTIFY_WINDOW_HANDLE);

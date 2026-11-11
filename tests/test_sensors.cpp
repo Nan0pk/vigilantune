@@ -2,7 +2,7 @@
 #include "../src/agent/sensors.hpp"
 #include "../shared/types.hpp"
 
-using namespace nanoloop;
+using namespace vigilantune;
 
 TEST(SensorTest, Lifecycle) {
     TagDatabase db;
