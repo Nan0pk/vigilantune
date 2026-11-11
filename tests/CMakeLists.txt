@@ -38,6 +38,7 @@ add_executable(vigilantune_tests
   test_config.cpp
   test_controller.cpp
   test_heartbeat.cpp
+  test_power_backend.cpp
   test_inference.cpp
   test_sensors.cpp
 )

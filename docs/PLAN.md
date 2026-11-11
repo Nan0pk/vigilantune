@@ -53,7 +53,7 @@ Update your task's row in the same PR that does the work. Status is one of
 | T0.6 | One name everywhere | done | #3 |
 | T0.7 | Remove stale data; safe uninstall matching | done | #4 |
 | **Gate 0** | Clean base | passed | |
-| T1.1 | Power backend interface and fake | todo | |
+| T1.1 | Power backend interface and fake | in review | #6 |
 | T1.2 | Settings from SDK symbols, checked in CI | todo | |
 | T1.3 | Own one plan | todo | |
 | T1.4 | Replace actuators and control rule (never split) | todo | |
@@ -324,8 +324,8 @@ boost mode, proves each write, and restores the user's plan on exit.
 
 | ID | Do | Files | Done when |
 | --- | --- | --- | --- |
-| T1.1 | Add `IPowerBackend` with two implementations, `Win32PowerBackend` and `FakePowerBackend`. Methods: get active plan; duplicate a plan to a given GUID; set active; delete plan; set plan name; read and write mains and battery values; list the settings in a subgroup. `ActuatorManager` receives the backend in its constructor. Move the two parked test files back and run them on the fake. | new `src/agent/power_backend.*`, `actuators.*`, `tests/` | `git grep` finds no `Power*` call outside `Win32PowerBackend`; tests green; plan-list check passes |
-| T1.2 | Add `power_settings.hpp` holding only the subgroup, EPP and boost mode, by SDK symbol. Delete every hand-typed `DEFINE_GUID`. Add a unit test that compares each symbol with the GUID text in the reference table. Add a CI step that compares them with `powercfg /aliases`: fail on a different GUID, warn if the runner lacks an alias. | `power_settings.hpp`, `actuators.cpp`, `build.yml`, `tests/` | Both checks pass in CI |
+| T1.1 | Add `IPowerBackend` with `Win32PowerBackend` and `FakePowerBackend`: get, enumerate, duplicate, activate, name and delete plans; read and write mains and battery values; enumerate settings. Inject it into `ActuatorManager`, and route the watchdog's scheme activation through it. Move the two parked tests back and run them on the fake. | new `src/agent/power_backend.*`, `actuators.*`, `src/watchdog/`, CMake, `tests/` | No power-scheme or setting calls remain outside `Win32PowerBackend`; documented execution-request APIs in inference remain separate; tests green; plan-list check passes |
+| T1.2 | Add `power_settings.hpp` holding only the subgroup, EPP and boost mode by SDK symbol. Test their GUIDs against the reference table and compare them with `powercfg /aliases` in CI. Keep the legacy max/min definitions unchanged until T1.4 removes them with the old control rule; never make those legacy writes valid in isolation. | `power_settings.hpp`, `build.yml`, `tests/` | Both checks pass in CI; no legacy max/min GUID is corrected before T1.4 |
 | T1.3 | Own one plan. See "T1.3 in detail". Rename only a plan whose ownership has been established; never infer ownership from its name. | `actuators.*`, new `state.*` | Fake-backend tests prove: no write targets another GUID (I1); `state.json` holds the original before our plan is activated; an outside plan change causes zero writes; foreign or ambiguous plans, including name and GUID collisions, are left unchanged |
 | T1.4 | Replace the actuators and the control rule together. See "T1.4 in detail". **Never split this task.** | `actuators.*`, `controller.*`, `types.hpp`, `agent/main.cpp`, `tests/` | Tests cover clamping (I4), exists-then-read-back (I3) and failure handling; `git grep -i throttle` finds no power write |
 | T1.5 | Restore on exit. Add `ActuatorManager::shutdown()`: activate the original plan from `state.json`; if it no longer exists, activate Balanced; mark the state clean. Call it on normal exit. At start-up, if the state is not clean, restore first, then start. | `actuators.*`, `state.*`, `agent/main.cpp` | Fake-backend tests for clean exit, missing original and unclean start |
