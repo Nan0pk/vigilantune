@@ -7,6 +7,12 @@ $ErrorActionPreference = "Stop"
 $testRoot = Join-Path (Get-Location).Path ("uninstall-live-" + [guid]::NewGuid().ToString("N") + ".tmp")
 $installRoot = Join-Path $testRoot "install"
 $started = @()
+$skip = $false
+
+if (@(Get-Process -Name "VigilanTune.Watchdog" -ErrorAction SilentlyContinue).Count -gt 0) {
+    Write-Host "Skipping the live fixture because another VigilanTune watchdog is running."
+    exit 77
+}
 
 try {
     $scripts = Join-Path $installRoot "scripts"
@@ -28,11 +34,23 @@ try {
         throw "A synthetic process exited before cleanup began."
     }
 
-    & (Join-Path $scripts "uninstall.ps1")
-    if (-not $watchdog.WaitForExit(5000) -or -not $agent.WaitForExit(5000)) {
-        throw "Cleanup did not stop both synthetic processes."
+    try {
+        & (Join-Path $scripts "uninstall.ps1")
+    } catch {
+        $otherWatchdogs = @(Get-Process -Name "VigilanTune.Watchdog" -ErrorAction SilentlyContinue |
+            Where-Object { $_.Id -ne $watchdog.Id })
+        if ($otherWatchdogs.Count -eq 0) {
+            throw
+        }
+        Write-Host "Skipping the live fixture because another VigilanTune watchdog started."
+        $skip = $true
     }
-    Write-Host "Cleanup stopped both owned synthetic processes."
+    if (-not $skip) {
+        if (-not $watchdog.WaitForExit(5000) -or -not $agent.WaitForExit(5000)) {
+            throw "Cleanup did not stop both synthetic processes."
+        }
+        Write-Host "Cleanup stopped both owned synthetic processes."
+    }
 } finally {
     $allStopped = $true
     foreach ($process in $started) {
@@ -54,4 +72,7 @@ try {
     if (-not $allStopped) {
         throw "A synthetic process could not be stopped; test files were retained at $testRoot."
     }
+}
+if ($skip) {
+    exit 77
 }

@@ -112,6 +112,8 @@ try {
         New-FixtureProcess -Name "VigilanTune.Agent" -Id 26 -Path $agent -Handle $closedHandle
     )
     $caseSibling = Join-Path $testRoot "INSTALL"
+    $caseVariant = Join-Path (Join-Path $caseSibling "bin") "VigilanTune.Agent.exe"
+    $unverifiedProcesses += New-FixtureProcess -Name "VigilanTune.Agent" -Id 28 -Path $caseVariant -Handle $validHandle
     if (-not (Test-Path -LiteralPath $caseSibling)) {
         New-Item -ItemType Directory -Path $caseSibling | Out-Null
         $caseSiblingAgent = Join-Path $caseSibling "VigilanTune.Agent.exe"

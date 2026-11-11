@@ -28,7 +28,7 @@ if(WIN32)
       -File "${CMAKE_CURRENT_SOURCE_DIR}/test_uninstall_live.ps1"
       -AgentFixture "$<TARGET_FILE:uninstall_fixture_agent>"
       -WatchdogFixture "$<TARGET_FILE:uninstall_fixture_watchdog>")
-  set_tests_properties(UninstallRealProcesses PROPERTIES TIMEOUT 30)
+  set_tests_properties(UninstallRealProcesses PROPERTIES TIMEOUT 30 SKIP_RETURN_CODE 77)
 endif()
 
 # 1. Unit tests. Safe on any machine; these are what `ctest` runs.
