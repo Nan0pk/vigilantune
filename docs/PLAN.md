@@ -15,7 +15,7 @@ Update your task's row in the same PR that does the work. Status is one of
 
 | ID | Task | Status | PR |
 | --- | --- | --- | --- |
-| T0.1 | Agent docs and README banner | in review | |
+| T0.1 | Agent docs and README banner | in review | #1 |
 | T0.2 | Fix the compile error | todo | |
 | T0.3 | Park host-changing tests and timing benchmarks | todo | |
 | T0.4 | CI: Release build, pinned googletest, plan-list check | todo | |
